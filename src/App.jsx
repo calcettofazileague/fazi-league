@@ -4,20 +4,61 @@ import { ref, set, onValue } from "firebase/database";
 
 // ─── CONFIG ───
 const MATCH_DAYS = [
-  { key: "monday", label: "Lunedì" },
-  { key: "tuesday", label: "Martedì" },
-  { key: "wednesday", label: "Mercoledì" },
-  { key: "thursday", label: "Giovedì" },
-  { key: "friday", label: "Venerdì" },
+  { key: "monday", label: "Lunedì", jsDay: 1 },
+  { key: "tuesday", label: "Martedì", jsDay: 2 },
+  { key: "wednesday", label: "Mercoledì", jsDay: 3 },
+  { key: "thursday", label: "Giovedì", jsDay: 4 },
+  { key: "friday", label: "Venerdì", jsDay: 5 },
 ];
 const MAX_PLAYERS = 10;
+const MAX_RESERVES = 3;
+const MAX_TOTAL = MAX_PLAYERS + MAX_RESERVES;
 const TEAM_SIZE = 5;
+const MATCH_HOUR = 19;
+const MATCH_MINUTE = 30;
+const LOCK_HOURS_BEFORE = 6;
 
 const getWeekId = () => {
   const now = new Date();
   const start = new Date(now.getFullYear(), 0, 1);
   const diff = now - start;
   return `${now.getFullYear()}-W${Math.floor(diff / 604800000)}`;
+};
+
+// Get actual date for each match day this week
+const getWeekDates = () => {
+  const now = new Date();
+  const currentDay = now.getDay(); // 0=Sun, 1=Mon...
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - (currentDay === 0 ? 6 : currentDay - 1));
+  monday.setHours(0, 0, 0, 0);
+
+  const dates = {};
+  MATCH_DAYS.forEach((d, i) => {
+    const date = new Date(monday);
+    date.setDate(monday.getDate() + i);
+    dates[d.key] = date;
+  });
+  return dates;
+};
+
+const formatDate = (date) => {
+  const months = ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"];
+  return `${date.getDate()} ${months[date.getMonth()]}`;
+};
+
+const isLocked = (dayKey) => {
+  const dates = getWeekDates();
+  const matchDate = dates[dayKey];
+  if (!matchDate) return false;
+  const lockTime = new Date(matchDate);
+  lockTime.setHours(MATCH_HOUR - LOCK_HOURS_BEFORE, MATCH_MINUTE, 0, 0);
+  return new Date() >= lockTime;
+};
+
+const getLockTimeStr = (dayKey) => {
+  const lockH = MATCH_HOUR - LOCK_HOURS_BEFORE;
+  return `${lockH}:${String(MATCH_MINUTE).padStart(2, "0")}`;
 };
 
 // ─── BALANCED TEAM ALGORITHM ───
@@ -103,16 +144,24 @@ export default function App() {
   const handleSignup = async (dayKey) => {
     const name = playerName.trim();
     if (!name) return showToast("Scrivi il tuo nome!", "error");
+    if (isLocked(dayKey)) return showToast("Lista chiusa!", "error");
     const cur = signups[dayKey] || [];
     if (cur.some(n => n.toLowerCase() === name.toLowerCase())) return showToast("Già iscritto!", "error");
-    if (cur.length >= MAX_PLAYERS) return showToast("Completo!", "error");
+    if (cur.length >= MAX_TOTAL) return showToast("Lista piena (anche le riserve)!", "error");
     const updated = { ...signups, [dayKey]: [...cur, name] };
     setSignups(updated);
     await fbWrite(`signups/${weekId}`, updated);
-    showToast(`${name} iscritto per ${MATCH_DAYS.find(d => d.key === dayKey).label}!`);
+    const spot = cur.length + 1;
+    const label = MATCH_DAYS.find(d => d.key === dayKey).label;
+    if (spot <= MAX_PLAYERS) {
+      showToast(`${name} iscritto per ${label}!`);
+    } else {
+      showToast(`${name} in riserva #${spot - MAX_PLAYERS} per ${label}!`);
+    }
   };
 
   const handleRemove = async (dayKey, name) => {
+    if (isLocked(dayKey) && !adminMode) return showToast("Lista chiusa!", "error");
     const updated = { ...signups, [dayKey]: (signups[dayKey] || []).filter(n => n !== name) };
     setSignups(updated);
     await fbWrite(`signups/${weekId}`, updated);
@@ -121,7 +170,8 @@ export default function App() {
 
   // ─── TEAM GENERATION ───
   const generateTeams = async (dayKey) => {
-    const players = signups[dayKey] || [];
+    const allPlayers = signups[dayKey] || [];
+    const players = allPlayers.slice(0, MAX_PLAYERS); // Only titolari
     if (players.length < 2) return showToast("Servono almeno 2 giocatori!", "error");
     const result = balanceTeams(players, playerStats);
     const updated = { ...generatedTeams, [dayKey]: result };
@@ -132,7 +182,8 @@ export default function App() {
   };
 
   const shuffleTeams = async (dayKey) => {
-    const players = signups[dayKey] || [];
+    const allPlayers = signups[dayKey] || [];
+    const players = allPlayers.slice(0, MAX_PLAYERS);
     const shuffled = [...players].sort(() => Math.random() - 0.5);
     const result = balanceTeams(shuffled, playerStats);
     const updated = { ...generatedTeams, [dayKey]: result };
@@ -319,6 +370,9 @@ export default function App() {
       {/* ═══ TAB: ISCRIZIONI ═══ */}
       {tab === "signup" && (
         <div style={S.content}>
+          <p style={{ textAlign: "center", color: "#64748b", fontSize: 13, marginBottom: 16 }}>
+            ⏰ Partite alle <strong style={{ color: "#e2e8f0" }}>{MATCH_HOUR}:{String(MATCH_MINUTE).padStart(2, "0")}</strong> — Lista si chiude alle <strong style={{ color: "#eab308" }}>{MATCH_HOUR - LOCK_HOURS_BEFORE}:{String(MATCH_MINUTE).padStart(2, "0")}</strong> del giorno
+          </p>
           <div style={S.inputSection}>
             <div style={S.inputWrap}>
               <input type="text" placeholder="Il tuo nome..." value={playerName}
@@ -330,18 +384,34 @@ export default function App() {
           <div style={S.daysGrid}>
             {MATCH_DAYS.map(day => {
               const players = signups[day.key] || [];
-              const isFull = players.length >= MAX_PLAYERS;
-              const spots = MAX_PLAYERS - players.length;
+              const titolari = players.slice(0, MAX_PLAYERS);
+              const riserve = players.slice(MAX_PLAYERS, MAX_TOTAL);
+              const locked = isLocked(day.key);
+              const isFull = players.length >= MAX_TOTAL;
+              const spotsLeft = MAX_TOTAL - players.length;
+              const weekDates = getWeekDates();
+              const dateStr = formatDate(weekDates[day.key]);
+
               return (
-                <div key={day.key} style={S.dayCard}>
+                <div key={day.key} style={{ ...S.dayCard, opacity: locked ? 0.7 : 1 }}>
                   <div style={S.dayHead}>
-                    <span style={S.dayName}>{day.label}</span>
-                    <span style={{ ...S.countBadge, background: isFull ? "#16a34a" : players.length >= 7 ? "#eab308" : "#475569" }}>
-                      {players.length}/{MAX_PLAYERS}
+                    <div>
+                      <span style={S.dayName}>{day.label}</span>
+                      <span style={{ fontSize: 13, color: "#94a3b8", marginLeft: 8, fontFamily: "'Oswald', sans-serif", letterSpacing: 1 }}>{dateStr}</span>
+                    </div>
+                    <span style={{ ...S.countBadge, background: titolari.length >= MAX_PLAYERS ? "#16a34a" : titolari.length >= 7 ? "#eab308" : "#475569" }}>
+                      {titolari.length}/{MAX_PLAYERS}
                     </span>
                   </div>
+
+                  {locked && (
+                    <div style={{ padding: "6px 16px", background: "rgba(220,38,38,0.1)", borderBottom: "1px solid rgba(220,38,38,0.2)" }}>
+                      <span style={{ fontSize: 12, color: "#f87171", fontFamily: "'Oswald', sans-serif", letterSpacing: 1 }}>🔒 LISTA CHIUSA</span>
+                    </div>
+                  )}
+
                   <div style={S.playerList}>
-                    {players.map((p, i) => (
+                    {titolari.map((p, i) => (
                       <div key={i} style={{ ...S.playerRow, borderLeft: i < 5 ? "3px solid rgba(22,163,74,0.5)" : "3px solid rgba(234,179,8,0.5)" }}
                         onClick={() => (adminMode || p.toLowerCase() === playerName.trim().toLowerCase()) && handleRemove(day.key, p)}>
                         <span style={S.playerNum}>{i + 1}</span>
@@ -350,11 +420,26 @@ export default function App() {
                           <span style={S.removeX}>✕</span>}
                       </div>
                     ))}
+                    {riserve.length > 0 && (
+                      <div style={{ padding: "4px 10px 2px", marginTop: 4 }}>
+                        <span style={{ fontSize: 10, color: "#eab308", fontFamily: "'Oswald', sans-serif", letterSpacing: 2 }}>RISERVE</span>
+                      </div>
+                    )}
+                    {riserve.map((p, i) => (
+                      <div key={`r${i}`} style={{ ...S.playerRow, borderLeft: "3px dashed rgba(234,179,8,0.4)", background: "rgba(234,179,8,0.05)" }}
+                        onClick={() => (adminMode || p.toLowerCase() === playerName.trim().toLowerCase()) && handleRemove(day.key, p)}>
+                        <span style={{ ...S.playerNum, color: "#eab308" }}>R{i + 1}</span>
+                        <span style={S.playerNameText}>{p}</span>
+                        {(adminMode || p.toLowerCase() === playerName.trim().toLowerCase()) &&
+                          <span style={S.removeX}>✕</span>}
+                      </div>
+                    ))}
                     {players.length === 0 && <p style={S.emptyMsg}>Nessun iscritto</p>}
                   </div>
-                  <button onClick={() => handleSignup(day.key)} disabled={isFull}
-                    style={{ ...S.signBtn, ...(isFull ? S.signBtnFull : {}) }}>
-                    {isFull ? "COMPLETO ✓" : `MI ISCRIVO (${spots} posti)`}
+
+                  <button onClick={() => handleSignup(day.key)} disabled={isFull || locked}
+                    style={{ ...S.signBtn, ...(isFull || locked ? S.signBtnFull : {}), ...(locked ? { background: "rgba(220,38,38,0.1)", color: "#f87171" } : {}) }}>
+                    {locked ? "🔒 CHIUSA" : isFull ? "COMPLETO ✓" : titolari.length >= MAX_PLAYERS ? `RISERVA (${MAX_TOTAL - players.length} posti)` : `MI ISCRIVO (${MAX_PLAYERS - titolari.length} posti)`}
                   </button>
                 </div>
               );
@@ -363,7 +448,7 @@ export default function App() {
 
           <div style={S.footer}>
             <p style={S.footerText}>Scrivi il tuo nome → clicca "MI ISCRIVO" sul giorno che vuoi</p>
-            <p style={S.footerSub}>Per cancellarti, scrivi il tuo nome e clicca sulla tua riga</p>
+            <p style={S.footerSub}>I primi 10 giocano, dal 11° al 13° sono riserve. Lista si chiude 6h prima.</p>
           </div>
         </div>
       )}
@@ -374,11 +459,14 @@ export default function App() {
           <p style={S.sectionDesc}>Seleziona un giorno per generare squadre bilanciate in base alle statistiche.</p>
           <div style={S.dayBtns}>
             {MATCH_DAYS.map(day => {
-              const count = (signups[day.key] || []).length;
+              const allPlayers = signups[day.key] || [];
+              const count = Math.min(allPlayers.length, MAX_PLAYERS);
+              const weekDates = getWeekDates();
+              const dateStr = formatDate(weekDates[day.key]);
               return (
                 <button key={day.key} onClick={() => { setSelectedDay(day.key); generateTeams(day.key); }}
                   style={{ ...S.daySelectBtn, ...(selectedDay === day.key ? S.daySelectActive : {}), opacity: count < 2 ? 0.4 : 1 }}>
-                  <span style={S.daySelectLabel}>{day.label}</span>
+                  <span style={S.daySelectLabel}>{day.label} {dateStr}</span>
                   <span style={S.daySelectCount}>{count} giocatori</span>
                 </button>
               );
