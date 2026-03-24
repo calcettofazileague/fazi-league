@@ -20,23 +20,29 @@ const LOCK_HOURS_BEFORE = 6;
 
 const getWeekId = () => {
   const now = new Date();
-  const start = new Date(now.getFullYear(), 0, 1);
-  const diff = now - start;
-  return `${now.getFullYear()}-W${Math.floor(diff / 604800000)}`;
+  // Show next week's matches (people sign up in advance)
+  const target = new Date(now);
+  const currentDay = now.getDay();
+  const daysUntilNextMonday = currentDay === 0 ? 1 : 8 - currentDay;
+  target.setDate(now.getDate() + daysUntilNextMonday);
+  const start = new Date(target.getFullYear(), 0, 1);
+  const diff = target - start;
+  return `${target.getFullYear()}-W${Math.floor(diff / 604800000)}`;
 };
 
-// Get actual date for each match day this week
+// Get dates for next week's matches
 const getWeekDates = () => {
   const now = new Date();
-  const currentDay = now.getDay(); // 0=Sun, 1=Mon...
-  const monday = new Date(now);
-  monday.setDate(now.getDate() - (currentDay === 0 ? 6 : currentDay - 1));
-  monday.setHours(0, 0, 0, 0);
+  const currentDay = now.getDay();
+  const daysUntilNextMonday = currentDay === 0 ? 1 : 8 - currentDay;
+  const nextMonday = new Date(now);
+  nextMonday.setDate(now.getDate() + daysUntilNextMonday);
+  nextMonday.setHours(0, 0, 0, 0);
 
   const dates = {};
   MATCH_DAYS.forEach((d, i) => {
-    const date = new Date(monday);
-    date.setDate(monday.getDate() + i);
+    const date = new Date(nextMonday);
+    date.setDate(nextMonday.getDate() + i);
     dates[d.key] = date;
   });
   return dates;
