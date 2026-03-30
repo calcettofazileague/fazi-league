@@ -18,21 +18,47 @@ const MATCH_HOUR = 19;
 const MATCH_MINUTE = 30;
 const LOCK_HOURS_BEFORE = 6;
 
+// Ruoli disponibili per le card
+const RUOLI = ["POR", "DIF", "CEN", "ATT"];
+
+// ─── TIER SYSTEM ───
+const getTier = (presenze) => {
+  if (presenze >= 100) return { 
+    name: 'platinum', 
+    label: 'LEGGENDA', 
+    colors: { primary: '#E5E4E2', secondary: '#B0C4DE', dark: '#1a1a2e' },
+    gradient: 'linear-gradient(135deg, #FFFFFF 0%, #E5E4E2 50%, #B0C4DE 100%)'
+  };
+  if (presenze >= 50) return { 
+    name: 'gold', 
+    label: 'ELITE', 
+    colors: { primary: '#FFD700', secondary: '#DAA520', dark: '#8B6914' },
+    gradient: 'linear-gradient(135deg, #FFD700 0%, #DAA520 50%, #8B6914 100%)'
+  };
+  if (presenze >= 10) return { 
+    name: 'silver', 
+    label: 'VETERANO', 
+    colors: { primary: '#E8E8E8', secondary: '#A8A8A8', dark: '#707070' },
+    gradient: 'linear-gradient(135deg, #E8E8E8 0%, #A8A8A8 50%, #707070 100%)'
+  };
+  return { 
+    name: 'bronze', 
+    label: 'ROOKIE', 
+    colors: { primary: '#CD7F32', secondary: '#8B5A2B', dark: '#5C3317' },
+    gradient: 'linear-gradient(135deg, #CD7F32 0%, #8B5A2B 50%, #5C3317 100%)'
+  };
+};
+
 // Get the Monday that defines the active match week
-// Mon-Fri: show THIS week's matches
-// Sat-Sun: show NEXT week's matches (so people can sign up in advance)
 const getActiveMonday = () => {
   const now = new Date();
-  const currentDay = now.getDay(); // 0=Sun, 1=Mon...
-
+  const currentDay = now.getDay();
   const monday = new Date(now);
   monday.setHours(0, 0, 0, 0);
 
   if (currentDay >= 1 && currentDay <= 5) {
-    // Mon-Fri: go back to this week's Monday
     monday.setDate(now.getDate() - (currentDay - 1));
   } else {
-    // Sat(6) or Sun(0): jump forward to next Monday
     const daysUntilMonday = currentDay === 0 ? 1 : 2;
     monday.setDate(now.getDate() + daysUntilMonday);
   }
@@ -46,7 +72,6 @@ const getWeekId = () => {
   return `${monday.getFullYear()}-W${Math.floor(diff / 604800000)}`;
 };
 
-// Get dates for active week's matches
 const getWeekDates = () => {
   const monday = getActiveMonday();
   const dates = {};
@@ -77,16 +102,14 @@ const getLockTimeStr = (dayKey) => {
   return `${lockH}:${String(MATCH_MINUTE).padStart(2, "0")}`;
 };
 
-// ─── BALANCED TEAM ALGORITHM (based on presences) ───
+// ─── BALANCED TEAM ALGORITHM ───
 function balanceTeams(players, playerStats) {
   const scored = players.map((name) => {
     const s = playerStats[name.toLowerCase()] || { gamesPlayed: 0 };
     return { name, presenze: s.gamesPlayed || 0 };
   });
-  // Sort by presences: veterans first
   scored.sort((a, b) => b.presenze - a.presenze);
 
-  // Distribute alternating: most experienced get split between teams
   const teamA = [];
   const teamB = [];
   let sumA = 0, sumB = 0;
@@ -111,12 +134,357 @@ function fbListen(path, callback) {
   });
 }
 
+// ─── PLAYER CARD COMPONENT ───
+const PlayerCard = ({ nickname, numero, ruolo, eta, altezza, peso, presenze, foto, onClick }) => {
+  const tier = getTier(presenze);
+  
+  return (
+    <div onClick={onClick} style={{
+      width: 160,
+      height: 220,
+      borderRadius: 12,
+      overflow: 'hidden',
+      cursor: onClick ? 'pointer' : 'default',
+      transition: 'transform 0.2s, box-shadow 0.2s',
+      boxShadow: `0 4px 20px rgba(0,0,0,0.3), 0 0 0 2px ${tier.colors.secondary}`,
+      position: 'relative',
+      background: tier.gradient,
+    }}>
+      {/* Inner card */}
+      <div style={{
+        position: 'absolute',
+        top: 6,
+        left: 6,
+        right: 6,
+        bottom: 6,
+        borderRadius: 8,
+        background: 'linear-gradient(180deg, #2a2a3a 0%, #1a1a2a 100%)',
+        border: `1px solid ${tier.colors.primary}`,
+        display: 'flex',
+        flexDirection: 'column',
+      }}>
+        {/* Top section: numero + ruolo + foto */}
+        <div style={{ display: 'flex', padding: '8px 10px 4px', gap: 8 }}>
+          {/* Left: numero + ruolo + logo */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 40 }}>
+            <span style={{ 
+              fontFamily: "'Oswald', sans-serif", 
+              fontSize: 28, 
+              fontWeight: 700, 
+              color: tier.colors.primary,
+              lineHeight: 1,
+            }}>{numero || '?'}</span>
+            <span style={{ 
+              fontFamily: "'Oswald', sans-serif", 
+              fontSize: 11, 
+              color: tier.colors.primary,
+              letterSpacing: 1,
+            }}>{ruolo || 'N/D'}</span>
+            {/* Mini Logo */}
+            <div style={{
+              width: 28,
+              height: 28,
+              marginTop: 6,
+              borderRadius: 4,
+              background: 'rgba(0,0,0,0.3)',
+              border: `1px solid ${tier.colors.secondary}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}>
+              <span style={{ fontSize: 8, fontFamily: "'Oswald', sans-serif", color: tier.colors.primary, letterSpacing: 1 }}>FL</span>
+            </div>
+          </div>
+          
+          {/* Right: foto/silhouette */}
+          <div style={{
+            flex: 1,
+            height: 85,
+            borderRadius: 6,
+            background: 'linear-gradient(180deg, #3a3a4a 0%, #2a2a3a 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            overflow: 'hidden',
+          }}>
+            {foto ? (
+              <img src={foto} alt={nickname} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              <svg width="50" height="65" viewBox="0 0 50 65" fill="none">
+                <ellipse cx="25" cy="15" rx="12" ry="14" fill="#5a5a6a"/>
+                <path d="M10 35 Q8 50 12 62 L38 62 Q42 50 40 35 Q35 28 25 28 Q15 28 10 35" fill="#5a5a6a"/>
+              </svg>
+            )}
+          </div>
+        </div>
+        
+        {/* Name bar */}
+        <div style={{
+          background: 'rgba(0,0,0,0.4)',
+          padding: '6px 8px',
+          margin: '0 6px',
+          borderRadius: 4,
+        }}>
+          <p style={{
+            margin: 0,
+            fontFamily: "'Oswald', sans-serif",
+            fontSize: 13,
+            fontWeight: 600,
+            color: tier.colors.primary,
+            textAlign: 'center',
+            letterSpacing: 1,
+            textTransform: 'uppercase',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}>{nickname || 'SCONOSCIUTO'}</p>
+        </div>
+        
+        {/* Stats */}
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-around', 
+          padding: '8px 4px',
+          marginTop: 'auto',
+        }}>
+          <div style={{ textAlign: 'center' }}>
+            <p style={{ margin: 0, fontFamily: "'Oswald', sans-serif", fontSize: 16, fontWeight: 600, color: tier.colors.primary }}>{eta || '-'}</p>
+            <p style={{ margin: 0, fontSize: 8, color: '#888', letterSpacing: 1 }}>ETÀ</p>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <p style={{ margin: 0, fontFamily: "'Oswald', sans-serif", fontSize: 16, fontWeight: 600, color: tier.colors.primary }}>{altezza || '-'}</p>
+            <p style={{ margin: 0, fontSize: 8, color: '#888', letterSpacing: 1 }}>CM</p>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <p style={{ margin: 0, fontFamily: "'Oswald', sans-serif", fontSize: 16, fontWeight: 600, color: tier.colors.primary }}>{peso || '-'}</p>
+            <p style={{ margin: 0, fontSize: 8, color: '#888', letterSpacing: 1 }}>KG</p>
+          </div>
+        </div>
+        
+        {/* Presenze + Tier badge */}
+        <div style={{ 
+          padding: '4px 8px 8px',
+          textAlign: 'center',
+        }}>
+          <p style={{ margin: '0 0 2px', fontSize: 10, color: '#888' }}>{presenze} presenze</p>
+          <span style={{
+            display: 'inline-block',
+            padding: '2px 10px',
+            borderRadius: 10,
+            background: `linear-gradient(135deg, ${tier.colors.primary}22, ${tier.colors.secondary}22)`,
+            border: `1px solid ${tier.colors.primary}44`,
+            fontFamily: "'Oswald', sans-serif",
+            fontSize: 9,
+            letterSpacing: 2,
+            color: tier.colors.primary,
+          }}>{tier.label}</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── PLAYER FORM MODAL ───
+const PlayerFormModal = ({ player, onSave, onClose, existingNicknames }) => {
+  const [form, setForm] = useState(player || {
+    nickname: '',
+    numero: '',
+    ruolo: 'CEN',
+    eta: '',
+    altezza: '',
+    peso: '',
+  });
+  const [error, setError] = useState('');
+  
+  const handleSave = () => {
+    if (!form.nickname.trim()) {
+      setError('Inserisci un nickname');
+      return;
+    }
+    // Check nickname univoco (solo per nuovi profili)
+    if (!player && existingNicknames.some(n => n.toLowerCase() === form.nickname.trim().toLowerCase())) {
+      setError('Nickname già in uso!');
+      return;
+    }
+    onSave({
+      ...form,
+      nickname: form.nickname.trim(),
+      numero: parseInt(form.numero) || 0,
+      eta: parseInt(form.eta) || 0,
+      altezza: parseInt(form.altezza) || 0,
+      peso: parseInt(form.peso) || 0,
+    });
+  };
+  
+  return (
+    <div style={S.overlay}>
+      <div style={S.modal}>
+        <h3 style={S.modalTitle}>{player ? 'Modifica Profilo' : 'Crea il tuo Profilo'}</h3>
+        
+        {error && <p style={{ color: '#f87171', textAlign: 'center', marginBottom: 16 }}>{error}</p>}
+        
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
+          <div>
+            <label style={S.formLabel}>Nickname *</label>
+            <input 
+              type="text" 
+              value={form.nickname} 
+              onChange={e => setForm({...form, nickname: e.target.value})}
+              style={S.formInput}
+              placeholder="Come ti chiamano in campo?"
+              maxLength={20}
+              disabled={!!player} // Non modificabile se esiste già
+            />
+          </div>
+          
+          <div style={{ display: 'flex', gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <label style={S.formLabel}>Numero maglia</label>
+              <input 
+                type="number" 
+                value={form.numero} 
+                onChange={e => setForm({...form, numero: e.target.value})}
+                style={S.formInput}
+                placeholder="10"
+                min="1" max="99"
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={S.formLabel}>Ruolo</label>
+              <select 
+                value={form.ruolo} 
+                onChange={e => setForm({...form, ruolo: e.target.value})}
+                style={S.formInput}
+              >
+                {RUOLI.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </div>
+          </div>
+          
+          <div style={{ display: 'flex', gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <label style={S.formLabel}>Età</label>
+              <input 
+                type="number" 
+                value={form.eta} 
+                onChange={e => setForm({...form, eta: e.target.value})}
+                style={S.formInput}
+                placeholder="28"
+                min="10" max="70"
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={S.formLabel}>Altezza (cm)</label>
+              <input 
+                type="number" 
+                value={form.altezza} 
+                onChange={e => setForm({...form, altezza: e.target.value})}
+                style={S.formInput}
+                placeholder="178"
+                min="140" max="220"
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={S.formLabel}>Peso (kg)</label>
+              <input 
+                type="number" 
+                value={form.peso} 
+                onChange={e => setForm({...form, peso: e.target.value})}
+                style={S.formInput}
+                placeholder="75"
+                min="40" max="150"
+              />
+            </div>
+          </div>
+        </div>
+        
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+          <button style={S.cancelBtn} onClick={onClose}>ANNULLA</button>
+          <button style={S.saveBtn} onClick={handleSave}>💾 SALVA PROFILO</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── ADMIN PRESENZE MODAL ───
+const AdminPresenzeModal = ({ playerStats, onSave, onClose }) => {
+  const [stats, setStats] = useState({...playerStats});
+  
+  const updatePresenze = (key, delta) => {
+    const current = stats[key]?.gamesPlayed || 0;
+    const newVal = Math.max(0, current + delta);
+    setStats({
+      ...stats,
+      [key]: { ...stats[key], gamesPlayed: newVal }
+    });
+  };
+  
+  const handleSave = () => {
+    onSave(stats);
+  };
+  
+  const sorted = Object.entries(stats)
+    .filter(([_, p]) => p.name)
+    .sort((a, b) => (b[1].gamesPlayed || 0) - (a[1].gamesPlayed || 0));
+  
+  return (
+    <div style={S.overlay}>
+      <div style={{...S.modal, maxHeight: '80vh', overflow: 'auto'}}>
+        <h3 style={S.modalTitle}>🔧 Modifica Presenze (Admin)</h3>
+        
+        <div style={{ marginBottom: 20 }}>
+          {sorted.map(([key, p]) => (
+            <div key={key} style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'space-between',
+              padding: '10px 12px',
+              borderBottom: '1px solid rgba(255,255,255,0.05)',
+            }}>
+              <span style={{ fontWeight: 600, fontSize: 14 }}>{p.name}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <button 
+                  style={S.miniBtn} 
+                  onClick={() => updatePresenze(key, -1)}
+                >−</button>
+                <span style={{ 
+                  fontFamily: "'Oswald', sans-serif", 
+                  fontSize: 18, 
+                  fontWeight: 600,
+                  minWidth: 30,
+                  textAlign: 'center',
+                  color: '#4ade80'
+                }}>{p.gamesPlayed || 0}</span>
+                <button 
+                  style={S.miniBtn} 
+                  onClick={() => updatePresenze(key, 1)}
+                >+</button>
+              </div>
+            </div>
+          ))}
+          {sorted.length === 0 && (
+            <p style={{ textAlign: 'center', color: '#64748b', padding: 20 }}>Nessun giocatore registrato</p>
+          )}
+        </div>
+        
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+          <button style={S.cancelBtn} onClick={onClose}>ANNULLA</button>
+          <button style={S.saveBtn} onClick={handleSave}>💾 SALVA MODIFICHE</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ─── MAIN APP ───
 export default function App() {
   const [tab, setTab] = useState("signup");
   const [playerName, setPlayerName] = useState("");
   const [signups, setSignups] = useState({});
   const [playerStats, setPlayerStats] = useState({});
+  const [players, setPlayers] = useState({}); // Profili giocatori per le card
+  const [fieldStatus, setFieldStatus] = useState({}); // Stato campo prenotato
   const [matchHistory, setMatchHistory] = useState([]);
   const [generatedTeams, setGeneratedTeams] = useState({});
   const [loading, setLoading] = useState(true);
@@ -126,6 +494,10 @@ export default function App() {
   const [adminClicks, setAdminClicks] = useState(0);
   const [selectedDay, setSelectedDay] = useState(null);
   const [matchForm, setMatchForm] = useState(null);
+  const [showPlayerForm, setShowPlayerForm] = useState(false);
+  const [editingPlayer, setEditingPlayer] = useState(null);
+  const [showAdminPresenze, setShowAdminPresenze] = useState(false);
+  const [presenzeContate, setPresenzeContate] = useState({});
 
   const showToast = (msg, type = "success") => {
     setToast({ msg, type });
@@ -149,11 +521,69 @@ export default function App() {
     const unsub4 = fbListen(`teams/${weekId}`, (data) => {
       setGeneratedTeams(data || {});
     });
+    const unsub5 = fbListen("players", (data) => {
+      setPlayers(data || {});
+    });
+    const unsub6 = fbListen(`fieldStatus/${weekId}`, (data) => {
+      setFieldStatus(data || {});
+    });
+    const unsub7 = fbListen(`presenzeContate/${weekId}`, (data) => {
+      setPresenzeContate(data || {});
+    });
 
     setLoading(false);
 
-    return () => { unsub1(); unsub2(); unsub3(); unsub4(); };
+    return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); unsub7(); };
   }, [weekId]);
+
+  // ─── AUTO COUNT PRESENZE ON LIST LOCK ───
+  useEffect(() => {
+    const checkAndCountPresenze = async () => {
+      for (const day of MATCH_DAYS) {
+        if (isLocked(day.key) && !presenzeContate[day.key]) {
+          // Lista appena chiusa e non ancora contata
+          const players = signups[day.key] || [];
+          const titolari = players.slice(0, MAX_PLAYERS);
+          
+          if (titolari.length > 0) {
+            const newStats = { ...playerStats };
+            
+            for (const name of titolari) {
+              const key = name.toLowerCase();
+              if (!newStats[key]) {
+                newStats[key] = { name, gamesPlayed: 0, wins: 0, draws: 0, losses: 0 };
+              }
+              newStats[key].gamesPlayed = (newStats[key].gamesPlayed || 0) + 1;
+            }
+            
+            // Salva stats aggiornate
+            await fbWrite("playerStats", newStats);
+            
+            // Marca come contata
+            const newContate = { ...presenzeContate, [day.key]: true };
+            await fbWrite(`presenzeContate/${weekId}`, newContate);
+            
+            console.log(`Presenze contate per ${day.label}: ${titolari.length} giocatori`);
+          }
+        }
+      }
+    };
+    
+    // Check ogni minuto
+    const interval = setInterval(checkAndCountPresenze, 60000);
+    checkAndCountPresenze(); // Check immediato
+    
+    return () => clearInterval(interval);
+  }, [signups, presenzeContate, playerStats, weekId]);
+
+  // ─── FIELD STATUS TOGGLE ───
+  const toggleFieldStatus = async (dayKey) => {
+    if (!adminMode) return;
+    const newStatus = { ...fieldStatus, [dayKey]: !fieldStatus[dayKey] };
+    setFieldStatus(newStatus);
+    await fbWrite(`fieldStatus/${weekId}`, newStatus);
+    showToast(newStatus[dayKey] ? "Campo prenotato! ✓" : "Campo non prenotato");
+  };
 
   // ─── SIGNUP HANDLERS ───
   const handleSignup = async (dayKey) => {
@@ -183,10 +613,44 @@ export default function App() {
     showToast(`${name} rimosso.`);
   };
 
+  // ─── PLAYER PROFILE HANDLERS ───
+  const handleSavePlayer = async (playerData) => {
+    const key = playerData.nickname.toLowerCase().replace(/\s+/g, '_');
+    const newPlayers = { 
+      ...players, 
+      [key]: { 
+        ...playerData, 
+        dataRegistrazione: players[key]?.dataRegistrazione || new Date().toISOString() 
+      } 
+    };
+    setPlayers(newPlayers);
+    await fbWrite("players", newPlayers);
+    setShowPlayerForm(false);
+    setEditingPlayer(null);
+    showToast("Profilo salvato! 🎴");
+  };
+
+  const handleDeletePlayer = async (key) => {
+    if (!adminMode) return;
+    const newPlayers = { ...players };
+    delete newPlayers[key];
+    setPlayers(newPlayers);
+    await fbWrite("players", newPlayers);
+    showToast("Profilo eliminato");
+  };
+
+  // ─── ADMIN PRESENZE SAVE ───
+  const handleSaveAdminPresenze = async (newStats) => {
+    setPlayerStats(newStats);
+    await fbWrite("playerStats", newStats);
+    setShowAdminPresenze(false);
+    showToast("Presenze aggiornate!");
+  };
+
   // ─── TEAM GENERATION ───
   const generateTeams = async (dayKey) => {
     const allPlayers = signups[dayKey] || [];
-    const players = allPlayers.slice(0, MAX_PLAYERS); // Only titolari
+    const players = allPlayers.slice(0, MAX_PLAYERS);
     if (players.length < 2) return showToast("Servono almeno 2 giocatori!", "error");
     const result = balanceTeams(players, playerStats);
     const updated = { ...generatedTeams, [dayKey]: result };
@@ -233,11 +697,11 @@ export default function App() {
 
     const newStats = { ...playerStats };
     Object.entries(players).forEach(([name, data]) => {
-      if (!data.present) return; // Skip absent players
+      if (!data.present) return;
       const key = name.toLowerCase();
       const prev = newStats[key] || { name, gamesPlayed: 0, wins: 0, draws: 0, losses: 0 };
       prev.name = name;
-      prev.gamesPlayed += 1;
+      // gamesPlayed già contato automaticamente alla chiusura lista
       if (winner === "draw") prev.draws = (prev.draws || 0) + 1;
       else if (data.team === winner) prev.wins = (prev.wins || 0) + 1;
       else prev.losses = (prev.losses || 0) + 1;
@@ -262,7 +726,7 @@ export default function App() {
     await fbWrite("playerStats", newStats);
     await fbWrite(`matchHistory/${matchId}`, match);
     setMatchForm(null);
-    showToast("Partita registrata! Presenze aggiornate.");
+    showToast("Partita registrata!");
   };
 
   // ─── ADMIN ───
@@ -278,8 +742,12 @@ export default function App() {
     MATCH_DAYS.forEach(d => (empty[d.key] = []));
     setSignups(empty);
     setGeneratedTeams({});
+    setFieldStatus({});
+    setPresenzeContate({});
     await fbWrite(`signups/${weekId}`, empty);
     await fbWrite(`teams/${weekId}`, {});
+    await fbWrite(`fieldStatus/${weekId}`, {});
+    await fbWrite(`presenzeContate/${weekId}`, {});
     showToast("Liste azzerate!");
   };
 
@@ -295,6 +763,16 @@ export default function App() {
     return Object.values(playerStats)
       .filter(p => p.gamesPlayed > 0)
       .sort((a, b) => (b[sortBy] || 0) - (a[sortBy] || 0));
+  };
+
+  // Get player card data by merging players profile with stats
+  const getPlayerCardData = (playerKey) => {
+    const profile = players[playerKey] || {};
+    const stats = playerStats[profile.nickname?.toLowerCase()] || {};
+    return {
+      ...profile,
+      presenze: stats.gamesPlayed || 0,
+    };
   };
 
   if (loading) {
@@ -359,7 +837,7 @@ export default function App() {
         {[
           { id: "signup", label: "ISCRIZIONI", icon: "📋" },
           { id: "teams", label: "SQUADRE", icon: "⚔️" },
-          { id: "stats", label: "PRESENZE", icon: "🏃" },
+          { id: "careers", label: "CARRIERE", icon: "🎴" },
           { id: "history", label: "STORICO", icon: "🏆" },
         ].map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
@@ -386,21 +864,35 @@ export default function App() {
 
           <div style={S.daysGrid}>
             {MATCH_DAYS.map(day => {
-              const players = signups[day.key] || [];
-              const titolari = players.slice(0, MAX_PLAYERS);
-              const riserve = players.slice(MAX_PLAYERS, MAX_TOTAL);
+              const playersList = signups[day.key] || [];
+              const titolari = playersList.slice(0, MAX_PLAYERS);
+              const riserve = playersList.slice(MAX_PLAYERS, MAX_TOTAL);
               const locked = isLocked(day.key);
-              const isFull = players.length >= MAX_TOTAL;
-              const spotsLeft = MAX_TOTAL - players.length;
+              const isFull = playersList.length >= MAX_TOTAL;
+              const spotsLeft = MAX_TOTAL - playersList.length;
               const weekDates = getWeekDates();
               const dateStr = formatDate(weekDates[day.key]);
+              const isFieldBooked = fieldStatus[day.key];
 
               return (
                 <div key={day.key} style={{ ...S.dayCard, opacity: locked ? 0.7 : 1 }}>
                   <div style={S.dayHead}>
-                    <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={S.dayName}>{day.label}</span>
-                      <span style={{ fontSize: 13, color: "#94a3b8", marginLeft: 8, fontFamily: "'Oswald', sans-serif", letterSpacing: 1 }}>{dateStr}</span>
+                      <span style={{ fontSize: 13, color: "#94a3b8", fontFamily: "'Oswald', sans-serif", letterSpacing: 1 }}>{dateStr}</span>
+                      {/* Campo prenotato indicator */}
+                      <span 
+                        onClick={(e) => { e.stopPropagation(); toggleFieldStatus(day.key); }}
+                        style={{ 
+                          fontSize: 14, 
+                          cursor: adminMode ? 'pointer' : 'default',
+                          opacity: adminMode ? 1 : 0.7,
+                          transition: 'transform 0.2s',
+                        }}
+                        title={isFieldBooked ? "Campo prenotato" : "Campo non prenotato"}
+                      >
+                        {isFieldBooked ? '🟢' : '🔴'}
+                      </span>
                     </div>
                     <span style={{ ...S.countBadge, background: titolari.length >= MAX_PLAYERS ? "#16a34a" : titolari.length >= 7 ? "#eab308" : "#475569" }}>
                       {titolari.length}/{MAX_PLAYERS}
@@ -437,12 +929,12 @@ export default function App() {
                           <span style={S.removeX}>✕</span>}
                       </div>
                     ))}
-                    {players.length === 0 && <p style={S.emptyMsg}>Nessun iscritto</p>}
+                    {playersList.length === 0 && <p style={S.emptyMsg}>Nessun iscritto</p>}
                   </div>
 
                   <button onClick={() => handleSignup(day.key)} disabled={isFull || locked}
                     style={{ ...S.signBtn, ...(isFull || locked ? S.signBtnFull : {}), ...(locked ? { background: "rgba(220,38,38,0.1)", color: "#f87171" } : {}) }}>
-                    {locked ? "🔒 CHIUSA" : isFull ? "COMPLETO ✓" : titolari.length >= MAX_PLAYERS ? `RISERVA (${MAX_TOTAL - players.length} posti)` : `MI ISCRIVO (${MAX_PLAYERS - titolari.length} posti)`}
+                    {locked ? "🔒 CHIUSA" : isFull ? "COMPLETO ✓" : titolari.length >= MAX_PLAYERS ? `RISERVA (${MAX_TOTAL - playersList.length} posti)` : `MI ISCRIVO (${MAX_PLAYERS - titolari.length} posti)`}
                   </button>
                 </div>
               );
@@ -452,6 +944,7 @@ export default function App() {
           <div style={S.footer}>
             <p style={S.footerText}>Scrivi il tuo nome → clicca "MI ISCRIVO" sul giorno che vuoi</p>
             <p style={S.footerSub}>I primi 10 giocano, dal 11° al 13° sono riserve. Lista si chiude 6h prima.</p>
+            <p style={S.footerSub}>🟢 = Campo prenotato | 🔴 = Campo da prenotare</p>
           </div>
         </div>
       )}
@@ -570,13 +1063,133 @@ export default function App() {
         </div>
       )}
 
-      {/* ═══ TAB: STATISTICHE ═══ */}
-      {tab === "stats" && (
+      {/* ═══ TAB: CARRIERE ═══ */}
+      {tab === "careers" && (
         <div style={S.content}>
-          {getSortedPlayers().length === 0 ? (
-            <p style={S.emptyState}>Nessuna statistica ancora. Gioca qualche partita e registra i risultati!</p>
+          {/* Header section */}
+          <div style={{ textAlign: 'center', marginBottom: 24 }}>
+            <p style={S.sectionDesc}>Le tue statistiche, la tua card. Crea il tuo profilo e scala i tier!</p>
+            <button 
+              onClick={() => setShowPlayerForm(true)} 
+              style={{ ...S.actionBtn, ...S.actionPrimary, marginTop: 12 }}
+            >
+              ➕ CREA IL TUO PROFILO
+            </button>
+            {adminMode && (
+              <button 
+                onClick={() => setShowAdminPresenze(true)} 
+                style={{ ...S.actionBtn, marginTop: 12, marginLeft: 12, borderColor: '#eab308', color: '#eab308' }}
+              >
+                🔧 MODIFICA PRESENZE
+              </button>
+            )}
+          </div>
+
+          {/* Tier Legend */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'center',
+            gap: 16,
+            marginBottom: 24,
+            flexWrap: 'wrap',
+          }}>
+            {[
+              { label: 'ROOKIE', range: '0-9', color: '#CD7F32' },
+              { label: 'VETERANO', range: '10-49', color: '#A8A8A8' },
+              { label: 'ELITE', range: '50-99', color: '#FFD700' },
+              { label: 'LEGGENDA', range: '100+', color: '#E5E4E2' },
+            ].map(t => (
+              <div key={t.label} style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '4px 12px',
+                borderRadius: 20,
+                background: 'rgba(255,255,255,0.04)',
+                border: `1px solid ${t.color}33`,
+              }}>
+                <div style={{ width: 10, height: 10, borderRadius: '50%', background: t.color }} />
+                <span style={{ fontSize: 11, color: t.color, fontFamily: "'Oswald', sans-serif", letterSpacing: 1 }}>{t.label}</span>
+                <span style={{ fontSize: 10, color: '#64748b' }}>({t.range})</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Player Cards Grid */}
+          {Object.keys(players).length > 0 ? (
+            <div style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 20,
+              justifyContent: 'center',
+              marginBottom: 32,
+            }}>
+              {Object.entries(players)
+                .sort((a, b) => {
+                  const presenzeA = playerStats[a[1].nickname?.toLowerCase()]?.gamesPlayed || 0;
+                  const presenzeB = playerStats[b[1].nickname?.toLowerCase()]?.gamesPlayed || 0;
+                  return presenzeB - presenzeA;
+                })
+                .map(([key, player]) => {
+                  const presenze = playerStats[player.nickname?.toLowerCase()]?.gamesPlayed || 0;
+                  return (
+                    <div key={key} style={{ position: 'relative' }}>
+                      <PlayerCard
+                        nickname={player.nickname}
+                        numero={player.numero}
+                        ruolo={player.ruolo}
+                        eta={player.eta}
+                        altezza={player.altezza}
+                        peso={player.peso}
+                        presenze={presenze}
+                        foto={player.foto}
+                        onClick={adminMode ? () => {
+                          setEditingPlayer(player);
+                          setShowPlayerForm(true);
+                        } : null}
+                      />
+                      {adminMode && (
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleDeletePlayer(key); }}
+                          style={{
+                            position: 'absolute',
+                            top: -8,
+                            right: -8,
+                            width: 24,
+                            height: 24,
+                            borderRadius: '50%',
+                            background: '#dc2626',
+                            border: 'none',
+                            color: 'white',
+                            fontSize: 14,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >✕</button>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
           ) : (
+            <p style={S.emptyState}>Nessun profilo creato. Sii il primo! 🎴</p>
+          )}
+
+          {/* Classifica Presenze (from old PRESENZE tab) */}
+          {getSortedPlayers().length > 0 && (
             <>
+              <h3 style={{ 
+                fontFamily: "'Oswald', sans-serif", 
+                fontSize: 18, 
+                letterSpacing: 2, 
+                textAlign: 'center', 
+                marginBottom: 16,
+                color: '#e2e8f0',
+              }}>🏆 CLASSIFICA PRESENZE</h3>
+              
+              {/* Podium */}
               {getSortedPlayers().length >= 3 && (
                 <div style={S.podium}>
                   {[1, 0, 2].map(pos => {
@@ -595,6 +1208,8 @@ export default function App() {
                   })}
                 </div>
               )}
+
+              {/* Table */}
               <div style={S.table}>
                 <div style={S.tableHead}>
                   <span style={{ width: 30, textAlign: "center" }}>#</span>
@@ -615,6 +1230,8 @@ export default function App() {
                   </div>
                 ))}
               </div>
+
+              {/* Awards */}
               <div style={S.awards}>
                 {[
                   { label: "🏃 Più presente", key: "gamesPlayed", val: p => p.gamesPlayed + " presenze" },
@@ -661,7 +1278,25 @@ export default function App() {
         </div>
       )}
 
-      {/* ADMIN */}
+      {/* MODALS */}
+      {showPlayerForm && (
+        <PlayerFormModal 
+          player={editingPlayer}
+          existingNicknames={Object.values(players).map(p => p.nickname)}
+          onSave={handleSavePlayer}
+          onClose={() => { setShowPlayerForm(false); setEditingPlayer(null); }}
+        />
+      )}
+
+      {showAdminPresenze && (
+        <AdminPresenzeModal
+          playerStats={playerStats}
+          onSave={handleSaveAdminPresenze}
+          onClose={() => setShowAdminPresenze(false)}
+        />
+      )}
+
+      {/* ADMIN PANEL */}
       {adminMode && (
         <div style={{ position: "relative", zIndex: 1, textAlign: "center", padding: "24px 20px" }}>
           <p style={{ fontFamily: "'Oswald', sans-serif", fontSize: 13, letterSpacing: 3, color: "#eab308", marginBottom: 12 }}>🔧 Modalità Admin</p>
@@ -739,8 +1374,9 @@ const S = {
   scoreNum: { fontFamily: "'Oswald', sans-serif", fontSize: 36, fontWeight: 700, minWidth: 40, textAlign: "center" },
   formHeader: { display: "flex", padding: "8px 12px", fontFamily: "'Oswald', sans-serif", fontSize: 11, letterSpacing: 1.5, color: "#64748b", textTransform: "uppercase", borderBottom: "1px solid rgba(255,255,255,0.06)" },
   formRow: { display: "flex", alignItems: "center", padding: "8px 12px", borderBottom: "1px solid rgba(255,255,255,0.03)" },
-  miniBtn: { width: 26, height: 26, borderRadius: 6, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", color: "#e2e8f0", fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" },
-  miniVal: { minWidth: 28, textAlign: "center", fontFamily: "'Oswald', sans-serif", fontSize: 15, fontWeight: 600 },
+  formLabel: { display: "block", fontSize: 12, color: "#94a3b8", marginBottom: 4, fontFamily: "'Oswald', sans-serif", letterSpacing: 1 },
+  formInput: { width: "100%", padding: "10px 14px", fontSize: 15, fontFamily: "'Source Sans 3', sans-serif", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, color: "#e2e8f0", outline: "none", boxSizing: "border-box" },
+  miniBtn: { width: 32, height: 32, borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", color: "#e2e8f0", fontSize: 18, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Oswald', sans-serif" },
   cancelBtn: { padding: "10px 24px", fontFamily: "'Oswald', sans-serif", fontSize: 14, letterSpacing: 1.5, border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, background: "transparent", color: "#94a3b8", cursor: "pointer" },
   saveBtn: { padding: "10px 24px", fontFamily: "'Oswald', sans-serif", fontSize: 14, letterSpacing: 1.5, border: "none", borderRadius: 10, background: "linear-gradient(135deg, #16a34a, #15803d)", color: "white", cursor: "pointer" },
   emptyState: { textAlign: "center", color: "#64748b", fontSize: 15, padding: 40 },
