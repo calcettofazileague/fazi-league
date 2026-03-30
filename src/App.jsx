@@ -18,31 +18,41 @@ const MATCH_HOUR = 19;
 const MATCH_MINUTE = 30;
 const LOCK_HOURS_BEFORE = 6;
 
-const getWeekId = () => {
+// Get the Monday that defines the active match week
+// Mon-Fri: show THIS week's matches
+// Sat-Sun: show NEXT week's matches (so people can sign up in advance)
+const getActiveMonday = () => {
   const now = new Date();
-  // Show next week's matches (people sign up in advance)
-  const target = new Date(now);
-  const currentDay = now.getDay();
-  const daysUntilNextMonday = currentDay === 0 ? 1 : 8 - currentDay;
-  target.setDate(now.getDate() + daysUntilNextMonday);
-  const start = new Date(target.getFullYear(), 0, 1);
-  const diff = target - start;
-  return `${target.getFullYear()}-W${Math.floor(diff / 604800000)}`;
+  const currentDay = now.getDay(); // 0=Sun, 1=Mon...
+
+  const monday = new Date(now);
+  monday.setHours(0, 0, 0, 0);
+
+  if (currentDay >= 1 && currentDay <= 5) {
+    // Mon-Fri: go back to this week's Monday
+    monday.setDate(now.getDate() - (currentDay - 1));
+  } else {
+    // Sat(6) or Sun(0): jump forward to next Monday
+    const daysUntilMonday = currentDay === 0 ? 1 : 2;
+    monday.setDate(now.getDate() + daysUntilMonday);
+  }
+  return monday;
 };
 
-// Get dates for next week's matches
-const getWeekDates = () => {
-  const now = new Date();
-  const currentDay = now.getDay();
-  const daysUntilNextMonday = currentDay === 0 ? 1 : 8 - currentDay;
-  const nextMonday = new Date(now);
-  nextMonday.setDate(now.getDate() + daysUntilNextMonday);
-  nextMonday.setHours(0, 0, 0, 0);
+const getWeekId = () => {
+  const monday = getActiveMonday();
+  const start = new Date(monday.getFullYear(), 0, 1);
+  const diff = monday - start;
+  return `${monday.getFullYear()}-W${Math.floor(diff / 604800000)}`;
+};
 
+// Get dates for active week's matches
+const getWeekDates = () => {
+  const monday = getActiveMonday();
   const dates = {};
   MATCH_DAYS.forEach((d, i) => {
-    const date = new Date(nextMonday);
-    date.setDate(nextMonday.getDate() + i);
+    const date = new Date(monday);
+    date.setDate(monday.getDate() + i);
     dates[d.key] = date;
   });
   return dates;
@@ -67,28 +77,27 @@ const getLockTimeStr = (dayKey) => {
   return `${lockH}:${String(MATCH_MINUTE).padStart(2, "0")}`;
 };
 
-// ─── BALANCED TEAM ALGORITHM ───
+// ─── BALANCED TEAM ALGORITHM (based on presences) ───
 function balanceTeams(players, playerStats) {
   const scored = players.map((name) => {
-    const s = playerStats[name.toLowerCase()] || { goals: 0, assists: 0, avgRating: 6, gamesPlayed: 0, wins: 0 };
-    const rating = s.gamesPlayed > 0
-      ? s.avgRating * 0.5 + (s.goals / Math.max(s.gamesPlayed, 1)) * 2 + (s.assists / Math.max(s.gamesPlayed, 1)) * 1.5 + (s.wins / Math.max(s.gamesPlayed, 1)) * 1
-      : 6;
-    return { name, rating: Math.round(rating * 100) / 100 };
+    const s = playerStats[name.toLowerCase()] || { gamesPlayed: 0 };
+    return { name, presenze: s.gamesPlayed || 0 };
   });
-  scored.sort((a, b) => b.rating - a.rating);
+  // Sort by presences: veterans first
+  scored.sort((a, b) => b.presenze - a.presenze);
 
+  // Distribute alternating: most experienced get split between teams
   const teamA = [];
   const teamB = [];
   let sumA = 0, sumB = 0;
 
   for (const p of scored) {
-    if (teamA.length >= TEAM_SIZE) { teamB.push(p); sumB += p.rating; }
-    else if (teamB.length >= TEAM_SIZE) { teamA.push(p); sumA += p.rating; }
-    else if (sumA <= sumB) { teamA.push(p); sumA += p.rating; }
-    else { teamB.push(p); sumB += p.rating; }
+    if (teamA.length >= TEAM_SIZE) { teamB.push(p); sumB += p.presenze; }
+    else if (teamB.length >= TEAM_SIZE) { teamA.push(p); sumA += p.presenze; }
+    else if (sumA <= sumB) { teamA.push(p); sumA += p.presenze; }
+    else { teamB.push(p); sumB += p.presenze; }
   }
-  return { teamA, teamB, sumA: Math.round(sumA * 10) / 10, sumB: Math.round(sumB * 10) / 10 };
+  return { teamA, teamB, sumA, sumB };
 }
 
 // ─── FIREBASE HELPERS ───
@@ -205,15 +214,15 @@ export default function App() {
     const allPlayers = [...teams.teamA, ...teams.teamB];
     const pf = {};
     allPlayers.forEach(p => {
-      pf[p.name] = { goals: 0, assists: 0, rating: 6, team: teams.teamA.some(t => t.name === p.name) ? "A" : "B" };
+      pf[p.name] = { present: true, team: teams.teamA.some(t => t.name === p.name) ? "A" : "B" };
     });
     setMatchForm({ dayKey, players: pf, scoreA: 0, scoreB: 0 });
   };
 
-  const updateMatchPlayer = (name, field, val) => {
+  const togglePresence = (name) => {
     setMatchForm(prev => ({
       ...prev,
-      players: { ...prev.players, [name]: { ...prev.players[name], [field]: Math.max(0, val) } }
+      players: { ...prev.players, [name]: { ...prev.players[name], present: !prev.players[name].present } }
     }));
   };
 
@@ -224,29 +233,18 @@ export default function App() {
 
     const newStats = { ...playerStats };
     Object.entries(players).forEach(([name, data]) => {
+      if (!data.present) return; // Skip absent players
       const key = name.toLowerCase();
-      const prev = newStats[key] || { name, goals: 0, assists: 0, gamesPlayed: 0, totalRating: 0, avgRating: 6, wins: 0, draws: 0, losses: 0, mvpCount: 0 };
+      const prev = newStats[key] || { name, gamesPlayed: 0, wins: 0, draws: 0, losses: 0 };
       prev.name = name;
-      prev.goals += data.goals;
-      prev.assists += data.assists;
       prev.gamesPlayed += 1;
-      prev.totalRating = (prev.totalRating || 0) + data.rating;
-      prev.avgRating = Math.round((prev.totalRating / prev.gamesPlayed) * 10) / 10;
       if (winner === "draw") prev.draws = (prev.draws || 0) + 1;
-      else if (data.team === winner) prev.wins += 1;
+      else if (data.team === winner) prev.wins = (prev.wins || 0) + 1;
       else prev.losses = (prev.losses || 0) + 1;
       newStats[key] = prev;
     });
 
-    let mvpName = null, mvpRating = 0;
-    Object.entries(players).forEach(([name, data]) => {
-      if (data.rating > mvpRating) { mvpRating = data.rating; mvpName = name; }
-    });
-    if (mvpName) {
-      const k = mvpName.toLowerCase();
-      newStats[k].mvpCount = (newStats[k].mvpCount || 0) + 1;
-    }
-
+    const presentPlayers = Object.entries(players).filter(([_, d]) => d.present).map(([n]) => n);
     const matchId = Date.now();
     const match = {
       id: matchId,
@@ -256,8 +254,7 @@ export default function App() {
       scoreA,
       scoreB,
       winner,
-      mvp: mvpName,
-      players: { ...players },
+      players: presentPlayers,
     };
 
     setPlayerStats(newStats);
@@ -265,7 +262,7 @@ export default function App() {
     await fbWrite("playerStats", newStats);
     await fbWrite(`matchHistory/${matchId}`, match);
     setMatchForm(null);
-    showToast("Risultato salvato! Statistiche aggiornate.");
+    showToast("Partita registrata! Presenze aggiornate.");
   };
 
   // ─── ADMIN ───
@@ -294,7 +291,7 @@ export default function App() {
     showToast("Statistiche azzerate!");
   };
 
-  const getSortedPlayers = (sortBy = "avgRating") => {
+  const getSortedPlayers = (sortBy = "gamesPlayed") => {
     return Object.values(playerStats)
       .filter(p => p.gamesPlayed > 0)
       .sort((a, b) => (b[sortBy] || 0) - (a[sortBy] || 0));
@@ -362,7 +359,7 @@ export default function App() {
         {[
           { id: "signup", label: "ISCRIZIONI", icon: "📋" },
           { id: "teams", label: "SQUADRE", icon: "⚔️" },
-          { id: "stats", label: "STATISTICHE", icon: "📊" },
+          { id: "stats", label: "PRESENZE", icon: "🏃" },
           { id: "history", label: "STORICO", icon: "🏆" },
         ].map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
@@ -487,12 +484,12 @@ export default function App() {
                   <div style={S.teamBox}>
                     <div style={{ ...S.teamHeader, background: "linear-gradient(135deg, rgba(22,163,74,0.2), rgba(22,163,74,0.05))" }}>
                       <span style={S.teamTitle}>🟢 SQUADRA A</span>
-                      <span style={S.teamPower}>Forza: {t.sumA}</span>
+                      <span style={S.teamPower}>{t.sumA} presenze</span>
                     </div>
                     {t.teamA.map((p, i) => (
                       <div key={i} style={S.teamPlayer}>
                         <span style={{ fontSize: 15, fontWeight: 600 }}>{p.name}</span>
-                        <span style={{ fontSize: 14, color: "#94a3b8", fontFamily: "'Oswald', sans-serif" }}>{p.rating.toFixed(1)}</span>
+                        <span style={{ fontSize: 12, color: "#94a3b8", fontFamily: "'Oswald', sans-serif" }}>{p.presenze} pres.</span>
                       </div>
                     ))}
                   </div>
@@ -500,26 +497,26 @@ export default function App() {
                   <div style={S.teamBox}>
                     <div style={{ ...S.teamHeader, background: "linear-gradient(135deg, rgba(234,179,8,0.2), rgba(234,179,8,0.05))" }}>
                       <span style={S.teamTitle}>🟡 SQUADRA B</span>
-                      <span style={S.teamPower}>Forza: {t.sumB}</span>
+                      <span style={S.teamPower}>{t.sumB} presenze</span>
                     </div>
                     {t.teamB.map((p, i) => (
                       <div key={i} style={S.teamPlayer}>
                         <span style={{ fontSize: 15, fontWeight: 600 }}>{p.name}</span>
-                        <span style={{ fontSize: 14, color: "#94a3b8", fontFamily: "'Oswald', sans-serif" }}>{p.rating.toFixed(1)}</span>
+                        <span style={{ fontSize: 12, color: "#94a3b8", fontFamily: "'Oswald', sans-serif" }}>{p.presenze} pres.</span>
                       </div>
                     ))}
                   </div>
                 </div>
                 <div style={S.balanceBar}>
-                  <div style={{ ...S.balanceFill, width: `${(t.sumA / (t.sumA + t.sumB)) * 100}%` }} />
+                  <div style={{ ...S.balanceFill, width: `${t.sumA + t.sumB > 0 ? (t.sumA / (t.sumA + t.sumB)) * 100 : 50}%` }} />
                 </div>
                 <p style={S.balanceText}>
-                  Differenza: {Math.abs(t.sumA - t.sumB).toFixed(1)} punti
-                  {Math.abs(t.sumA - t.sumB) < 2 ? " — Perfettamente bilanciato! ⚖️" : ""}
+                  Differenza: {Math.abs(t.sumA - t.sumB)} presenze
+                  {Math.abs(t.sumA - t.sumB) <= 2 ? " — Ben bilanciato! ⚖️" : ""}
                 </p>
                 <div style={S.teamActions}>
                   <button onClick={() => shuffleTeams(selectedDay)} style={S.actionBtn}>🔄 RIMESCOLA</button>
-                  <button onClick={() => startMatchForm(selectedDay)} style={{ ...S.actionBtn, ...S.actionPrimary }}>📝 INSERISCI RISULTATO</button>
+                  <button onClick={() => startMatchForm(selectedDay)} style={{ ...S.actionBtn, ...S.actionPrimary }}>✅ REGISTRA PARTITA</button>
                 </div>
               </div>
             );
@@ -528,7 +525,7 @@ export default function App() {
           {matchForm && (
             <div style={S.overlay}>
               <div style={S.modal}>
-                <h3 style={S.modalTitle}>Risultato Partita — {MATCH_DAYS.find(d => d.key === matchForm.dayKey)?.label}</h3>
+                <h3 style={S.modalTitle}>Registra Partita — {MATCH_DAYS.find(d => d.key === matchForm.dayKey)?.label}</h3>
                 <div style={S.scoreRow}>
                   <div style={S.scoreTeam}>
                     <span style={S.scoreLabel}>🟢 Squadra A</span>
@@ -551,31 +548,21 @@ export default function App() {
                 <div style={{ marginBottom: 20 }}>
                   <div style={S.formHeader}>
                     <span style={{ flex: 2 }}>Giocatore</span>
-                    <span style={{ flex: 1, textAlign: "center" }}>⚽ Gol</span>
-                    <span style={{ flex: 1, textAlign: "center" }}>🅰️ Assist</span>
-                    <span style={{ flex: 1, textAlign: "center" }}>⭐ Voto</span>
+                    <span style={{ flex: 1, textAlign: "center" }}>Presente?</span>
                   </div>
                   {Object.entries(matchForm.players).map(([name, data]) => (
-                    <div key={name} style={{ ...S.formRow, borderLeft: data.team === "A" ? "3px solid #16a34a" : "3px solid #eab308" }}>
+                    <div key={name} style={{ ...S.formRow, borderLeft: data.team === "A" ? "3px solid #16a34a" : "3px solid #eab308", opacity: data.present ? 1 : 0.4, cursor: "pointer" }}
+                      onClick={() => togglePresence(name)}>
                       <span style={{ flex: 2, fontWeight: 600, fontSize: 14 }}>{name}</span>
-                      {["goals", "assists"].map(field => (
-                        <div key={field} style={{ flex: 1, display: "flex", justifyContent: "center", alignItems: "center" }}>
-                          <button style={S.miniBtn} onClick={() => updateMatchPlayer(name, field, data[field] - 1)}>−</button>
-                          <span style={S.miniVal}>{data[field]}</span>
-                          <button style={S.miniBtn} onClick={() => updateMatchPlayer(name, field, data[field] + 1)}>+</button>
-                        </div>
-                      ))}
-                      <div style={{ flex: 1, display: "flex", justifyContent: "center", alignItems: "center" }}>
-                        <button style={S.miniBtn} onClick={() => updateMatchPlayer(name, "rating", Math.max(1, data.rating - 0.5))}>−</button>
-                        <span style={{ ...S.miniVal, color: data.rating >= 7 ? "#4ade80" : data.rating < 5.5 ? "#f87171" : "#e2e8f0" }}>{data.rating}</span>
-                        <button style={S.miniBtn} onClick={() => updateMatchPlayer(name, "rating", Math.min(10, data.rating + 0.5))}>+</button>
+                      <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
+                        <span style={{ fontSize: 20 }}>{data.present ? "✅" : "❌"}</span>
                       </div>
                     </div>
                   ))}
                 </div>
                 <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
                   <button style={S.cancelBtn} onClick={() => setMatchForm(null)}>ANNULLA</button>
-                  <button style={S.saveBtn} onClick={saveMatchResult}>💾 SALVA RISULTATO</button>
+                  <button style={S.saveBtn} onClick={saveMatchResult}>💾 SALVA PARTITA</button>
                 </div>
               </div>
             </div>
@@ -587,7 +574,7 @@ export default function App() {
       {tab === "stats" && (
         <div style={S.content}>
           {getSortedPlayers().length === 0 ? (
-            <p style={S.emptyState}>Nessuna statistica ancora. Gioca qualche partita e inserisci i risultati!</p>
+            <p style={S.emptyState}>Nessuna statistica ancora. Gioca qualche partita e registra i risultati!</p>
           ) : (
             <>
               {getSortedPlayers().length >= 3 && (
@@ -601,7 +588,7 @@ export default function App() {
                       <div key={pos} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, order: pos === 0 ? 1 : pos === 1 ? 0 : 2 }}>
                         <span style={{ fontSize: pos === 0 ? 36 : 28 }}>{medals[pos]}</span>
                         <span style={S.podiumName}>{p.name}</span>
-                        <span style={S.podiumRating}>{p.avgRating}</span>
+                        <span style={S.podiumRating}>{p.gamesPlayed} presenze</span>
                         <div style={{ width: 80, height: heights[pos], borderRadius: "12px 12px 0 0", background: pos === 0 ? "linear-gradient(180deg, #eab308, #a16207)" : pos === 1 ? "linear-gradient(180deg, #94a3b8, #64748b)" : "linear-gradient(180deg, #b45309, #78350f)" }} />
                       </div>
                     );
@@ -611,33 +598,27 @@ export default function App() {
               <div style={S.table}>
                 <div style={S.tableHead}>
                   <span style={{ width: 30, textAlign: "center" }}>#</span>
-                  <span style={{ flex: 2 }}>Giocatore</span>
-                  <span style={{ flex: 1, textAlign: "center" }}>PG</span>
-                  <span style={{ flex: 1, textAlign: "center" }}>⚽</span>
-                  <span style={{ flex: 1, textAlign: "center" }}>🅰️</span>
-                  <span style={{ flex: 1, textAlign: "center" }}>V/P/S</span>
-                  <span style={{ flex: 1, textAlign: "center" }}>⭐</span>
-                  <span style={{ flex: 1, textAlign: "center" }}>🏅</span>
+                  <span style={{ flex: 3 }}>Giocatore</span>
+                  <span style={{ flex: 1, textAlign: "center" }}>Presenze</span>
+                  <span style={{ flex: 1, textAlign: "center" }}>V</span>
+                  <span style={{ flex: 1, textAlign: "center" }}>P</span>
+                  <span style={{ flex: 1, textAlign: "center" }}>S</span>
                 </div>
                 {getSortedPlayers().map((p, i) => (
                   <div key={p.name} style={{ ...S.tableRow, background: i % 2 === 0 ? "rgba(255,255,255,0.02)" : "transparent" }}>
                     <span style={{ width: 30, textAlign: "center", fontWeight: 700, color: i < 3 ? "#eab308" : "#64748b" }}>{i + 1}</span>
-                    <span style={{ flex: 2, fontWeight: 600 }}>{p.name}</span>
-                    <span style={{ flex: 1, textAlign: "center", color: "#94a3b8" }}>{p.gamesPlayed}</span>
-                    <span style={{ flex: 1, textAlign: "center" }}>{p.goals}</span>
-                    <span style={{ flex: 1, textAlign: "center" }}>{p.assists}</span>
-                    <span style={{ flex: 1, textAlign: "center", fontSize: 12, color: "#94a3b8" }}>{p.wins}/{p.draws || 0}/{p.losses || 0}</span>
-                    <span style={{ flex: 1, textAlign: "center", fontWeight: 700, color: p.avgRating >= 7 ? "#4ade80" : p.avgRating < 5.5 ? "#f87171" : "#e2e8f0" }}>{p.avgRating}</span>
-                    <span style={{ flex: 1, textAlign: "center" }}>{p.mvpCount || 0}</span>
+                    <span style={{ flex: 3, fontWeight: 600 }}>{p.name}</span>
+                    <span style={{ flex: 1, textAlign: "center", fontWeight: 700, color: "#4ade80" }}>{p.gamesPlayed}</span>
+                    <span style={{ flex: 1, textAlign: "center", color: "#16a34a" }}>{p.wins || 0}</span>
+                    <span style={{ flex: 1, textAlign: "center", color: "#94a3b8" }}>{p.draws || 0}</span>
+                    <span style={{ flex: 1, textAlign: "center", color: "#f87171" }}>{p.losses || 0}</span>
                   </div>
                 ))}
               </div>
               <div style={S.awards}>
                 {[
-                  { label: "⚽ Capocannoniere", key: "goals", val: p => p.goals + " gol" },
-                  { label: "🅰️ Re degli Assist", key: "assists", val: p => p.assists + " assist" },
-                  { label: "🏅 MVP più volte", key: "mvpCount", val: p => (p.mvpCount || 0) + " volte" },
-                  { label: "🏆 Più vittorie", key: "wins", val: p => p.wins + " vittorie" },
+                  { label: "🏃 Più presente", key: "gamesPlayed", val: p => p.gamesPlayed + " presenze" },
+                  { label: "🏆 Più vittorie", key: "wins", val: p => (p.wins || 0) + " vittorie" },
                 ].map(stat => {
                   const sorted = getSortedPlayers(stat.key);
                   const top = sorted[0];
@@ -672,7 +653,9 @@ export default function App() {
                 <span style={{ fontSize: 28, fontWeight: 700, letterSpacing: 3 }}>{m.scoreA} — {m.scoreB}</span>
                 <span style={{ color: m.winner === "B" ? "#4ade80" : "#e2e8f0" }}>Squadra B</span>
               </div>
-              {m.mvp && <div style={{ textAlign: "center", marginTop: 8, fontSize: 13, color: "#eab308" }}>🏅 MVP: {m.mvp}</div>}
+              <div style={{ textAlign: "center", marginTop: 8, fontSize: 12, color: "#64748b" }}>
+                {Array.isArray(m.players) ? `${m.players.length} giocatori` : ""}
+              </div>
             </div>
           ))}
         </div>
