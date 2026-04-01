@@ -79,12 +79,14 @@ const fbW = (p, d) => set(ref(db, p), d).catch(e => console.error(e));
 const fbL = (p, cb) => onValue(ref(db, p), s => cb(s.val()));
 
 // ─── JERSEY CARD (back of shirt design) ───
-function JerseyCard({ name, presenze, mvpCount, wins, losses, numero, ruolo, eta, altezza, peso, piede, onEdit }) {
+function JerseyCard({ name, presenze, mvpCount, wins, losses, numero, ruolo, eta, altezza, peso, piede, onEdit, onDelete }) {
   const t = getTier(presenze || 0);
   const displayNum = numero || "?";
   const displayName = (name || "GIOCATORE").toUpperCase();
   return (
-    <div style={{ width: 170, borderRadius: 14, overflow: "hidden", border: `2px solid ${t.border}`, background: "#0d1117", flexShrink: 0, cursor: onEdit ? "pointer" : "default" }} onClick={onEdit}>
+    <div style={{ width: 170, borderRadius: 14, overflow: "hidden", border: `2px solid ${t.border}`, background: "#0d1117", flexShrink: 0, cursor: onEdit ? "pointer" : "default", position: "relative" }} onClick={onEdit}>
+      {/* Delete button (admin only) */}
+      {onDelete && <div onClick={e => { e.stopPropagation(); onDelete(); }} style={{ position: "absolute", top: 4, right: 4, zIndex: 10, width: 22, height: 22, borderRadius: "50%", background: "rgba(220,38,38,0.85)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 12, fontWeight: 700, color: "#fff", lineHeight: 1 }}>✕</div>}
       {/* === JERSEY TOP (back of shirt) === */}
       <div style={{ background: t.bg, position: "relative", height: 190, overflow: "hidden" }}>
         {/* Shirt texture - subtle V lines */}
@@ -273,6 +275,14 @@ export default function App() {
     await fbW("players", upd);
     setProfileForm(null);
     showToast("Profilo salvato!");
+  };
+  const deleteProfile = async (nick) => {
+    const key = nick.toLowerCase().replace(/[^a-z0-9]/g, "_");
+    const upd = { ...players };
+    delete upd[key];
+    setPlayers(upd);
+    await fbW("players", upd);
+    showToast(`${nick} eliminato.`);
   };
 
   if (loading) return <div style={S.loadWrap}><div style={S.spinner}/><p style={S.loadText}>Caricamento...</p></div>;
@@ -465,7 +475,7 @@ export default function App() {
             <div style={{display:"flex",gap:12,overflowX:"auto",padding:"0 0 20px",WebkitOverflowScrolling:"touch"}}>
               {Object.values(players).map(p => {
                 const st = playerStats[p.nickname?.toLowerCase()] || {};
-                return <JerseyCard key={p.nickname} name={p.nickname} presenze={st.gamesPlayed} mvpCount={st.mvpCount} wins={st.wins} losses={st.losses} numero={p.numero} ruolo={p.ruolo} eta={p.eta} altezza={p.altezza} peso={p.peso} piede={p.piede} onEdit={()=>openProfileForm(p.nickname)} />;
+                return <JerseyCard key={p.nickname} name={p.nickname} presenze={st.gamesPlayed} mvpCount={st.mvpCount} wins={st.wins} losses={st.losses} numero={p.numero} ruolo={p.ruolo} eta={p.eta} altezza={p.altezza} peso={p.peso} piede={p.piede} onEdit={()=>openProfileForm(p.nickname)} onDelete={adminMode ? ()=>deleteProfile(p.nickname) : null} />;
               })}
             </div>
           )}
