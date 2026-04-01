@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { db } from "./firebase.js";
 import { ref, set, onValue } from "firebase/database";
 
@@ -166,6 +166,26 @@ export default function App() {
     return () => { u1(); u2(); u3(); u4(); u5(); };
   }, [weekId]);
 
+  // AUTO-GENERATE TEAMS when list closes with valid match (only once per day)
+  const teamsGenerated = useRef({});
+  useEffect(() => {
+    MATCH_DAYS.forEach(day => {
+      const dk = day.key;
+      // Skip if already generated (in Firebase or this session)
+      if (generatedTeams[dk] || teamsGenerated.current[dk]) return;
+      if (isLocked(dk) && isMatchValid(dk, signups)) {
+        const pl = (signups[dk] || []).slice(0, MAX_PLAYERS);
+        if (pl.length >= MAX_PLAYERS) {
+          teamsGenerated.current[dk] = true;
+          const r = balanceTeams(pl, playerStats);
+          const upd = { ...generatedTeams, [dk]: r };
+          setGeneratedTeams(upd);
+          fbW(`teams/${weekId}`, upd);
+        }
+      }
+    });
+  }, [signups, playerStats, weekId]); // removed generatedTeams from deps
+
   // SIGNUP
   const handleSignup = async (dk) => {
     const nm = playerName.trim();
@@ -187,15 +207,7 @@ export default function App() {
     showToast(`${nm} rimosso.`);
   };
 
-  // TEAMS
-  const generateTeams = async (dk) => {
-    const pl = (signups[dk] || []).slice(0, MAX_PLAYERS);
-    if (pl.length < 2) return showToast("Servono almeno 2 giocatori!", "error");
-    const r = balanceTeams(pl, playerStats);
-    const upd = { ...generatedTeams, [dk]: r };
-    setGeneratedTeams(upd); await fbW(`teams/${weekId}`, upd);
-    setSelectedDay(dk); showToast("Squadre generate!");
-  };
+  // TEAMS (auto-generated, shuffle for admin only)
   const shuffleTeams = async (dk) => {
     const pl = (signups[dk] || []).slice(0, MAX_PLAYERS).sort(() => Math.random() - 0.5);
     const r = balanceTeams(pl, playerStats);
@@ -352,35 +364,55 @@ export default function App() {
       {/* ═══ SQUADRE ═══ */}
       {tab==="teams"&&(
         <div style={S.content}>
-          <p style={S.sectionDesc}>Genera squadre bilanciate per esperienza.</p>
-          <div style={S.dayBtns}>
-            {MATCH_DAYS.map(day=>{const c=Math.min((signups[day.key]||[]).length,MAX_PLAYERS),ds=fmtDate(getWeekDates()[day.key]);return(
-              <button key={day.key} onClick={()=>{setSelectedDay(day.key);generateTeams(day.key);}} style={{...S.daySelectBtn,...(selectedDay===day.key?S.daySelectActive:{}),opacity:c<2?0.4:1}}>
-                <span style={S.daySelectLabel}>{day.label} {ds}</span><span style={S.daySelectCount}>{c} giocatori</span>
-              </button>
-            );})}
-          </div>
-          {selectedDay&&generatedTeams[selectedDay]&&(()=>{const t=generatedTeams[selectedDay];return(
-            <div style={{marginTop:8}}>
-              <div style={S.teamVsRow}>
-                <div style={S.teamBox}>
-                  <div style={{...S.teamHeader,background:"linear-gradient(135deg,rgba(22,163,74,0.2),rgba(22,163,74,0.05))"}}><span style={S.teamTitle}>🟢 SQ A</span><span style={S.teamPower}>{t.sumA} pres.</span></div>
-                  {t.teamA.map((p,i)=>(<div key={i} style={S.teamPlayer}><span style={{fontSize:15,fontWeight:600}}>{p.name}</span><span style={{fontSize:12,color:"#94a3b8",fontFamily:"'Oswald',sans-serif"}}>{p.presenze}</span></div>))}
+          <p style={S.sectionDesc}>Le squadre si generano automaticamente alla chiusura delle liste.</p>
+          
+          {MATCH_DAYS.map(day => {
+            const dk = day.key;
+            const lk = isLocked(dk);
+            const vl = isMatchValid(dk, signups);
+            const t = generatedTeams[dk];
+            const wd = getWeekDates();
+            const ds = fmtDate(wd[dk]);
+            
+            // Not locked yet or not valid = no teams
+            if (!lk || !vl || !t) {
+              return (
+                <div key={dk} style={{...S.dayCard, marginBottom: 12, opacity: 0.5}}>
+                  <div style={S.dayHead}>
+                    <div><span style={S.dayName}>{day.label}</span><span style={{fontSize:13,color:"#94a3b8",marginLeft:8,fontFamily:"'Oswald',sans-serif",letterSpacing:1}}>{ds}</span></div>
+                    <span style={{fontSize:12,color:"#64748b",fontFamily:"'Oswald',sans-serif",letterSpacing:1}}>
+                      {!lk ? "⏳ Lista aperta" : !vl ? "❌ Annullata" : "..."}
+                    </span>
+                  </div>
                 </div>
-                <div style={S.vsCircle}><span style={{fontSize:20,fontWeight:800,fontFamily:"'Oswald',sans-serif",color:"#64748b"}}>VS</span></div>
-                <div style={S.teamBox}>
-                  <div style={{...S.teamHeader,background:"linear-gradient(135deg,rgba(234,179,8,0.2),rgba(234,179,8,0.05))"}}><span style={S.teamTitle}>🟡 SQ B</span><span style={S.teamPower}>{t.sumB} pres.</span></div>
-                  {t.teamB.map((p,i)=>(<div key={i} style={S.teamPlayer}><span style={{fontSize:15,fontWeight:600}}>{p.name}</span><span style={{fontSize:12,color:"#94a3b8",fontFamily:"'Oswald',sans-serif"}}>{p.presenze}</span></div>))}
+              );
+            }
+            
+            return (
+              <div key={dk} style={{marginBottom: 20}}>
+                <div style={{fontFamily:"'Oswald',sans-serif",fontSize:18,fontWeight:600,letterSpacing:2,marginBottom:8}}>
+                  {day.label} <span style={{fontSize:13,color:"#94a3b8",fontWeight:400}}>{ds}</span>
+                </div>
+                <div style={S.teamVsRow}>
+                  <div style={S.teamBox}>
+                    <div style={{...S.teamHeader,background:"linear-gradient(135deg,rgba(22,163,74,0.2),rgba(22,163,74,0.05))"}}><span style={S.teamTitle}>🟢 SQ A</span><span style={S.teamPower}>{t.sumA} pres.</span></div>
+                    {t.teamA.map((p,i)=>(<div key={i} style={S.teamPlayer}><span style={{fontSize:15,fontWeight:600}}>{p.name}</span><span style={{fontSize:12,color:"#94a3b8",fontFamily:"'Oswald',sans-serif"}}>{p.presenze}</span></div>))}
+                  </div>
+                  <div style={S.vsCircle}><span style={{fontSize:20,fontWeight:800,fontFamily:"'Oswald',sans-serif",color:"#64748b"}}>VS</span></div>
+                  <div style={S.teamBox}>
+                    <div style={{...S.teamHeader,background:"linear-gradient(135deg,rgba(234,179,8,0.2),rgba(234,179,8,0.05))"}}><span style={S.teamTitle}>🟡 SQ B</span><span style={S.teamPower}>{t.sumB} pres.</span></div>
+                    {t.teamB.map((p,i)=>(<div key={i} style={S.teamPlayer}><span style={{fontSize:15,fontWeight:600}}>{p.name}</span><span style={{fontSize:12,color:"#94a3b8",fontFamily:"'Oswald',sans-serif"}}>{p.presenze}</span></div>))}
+                  </div>
+                </div>
+                <div style={S.balanceBar}><div style={{...S.balanceFill,width:`${t.sumA+t.sumB>0?(t.sumA/(t.sumA+t.sumB))*100:50}%`}}/></div>
+                <p style={S.balanceText}>Diff: {Math.abs(t.sumA-t.sumB)} pres. {Math.abs(t.sumA-t.sumB)<=2?"⚖️":""}</p>
+                <div style={S.teamActions}>
+                  {adminMode && <button onClick={()=>shuffleTeams(dk)} style={S.actionBtn}>🔄 RIMESCOLA</button>}
+                  {adminMode && <button onClick={()=>startMatchForm(dk)} style={{...S.actionBtn,...S.actionPrimary}}>✅ REGISTRA PARTITA</button>}
                 </div>
               </div>
-              <div style={S.balanceBar}><div style={{...S.balanceFill,width:`${t.sumA+t.sumB>0?(t.sumA/(t.sumA+t.sumB))*100:50}%`}}/></div>
-              <p style={S.balanceText}>Diff: {Math.abs(t.sumA-t.sumB)} pres. {Math.abs(t.sumA-t.sumB)<=2?"⚖️":""}</p>
-              <div style={S.teamActions}>
-                <button onClick={()=>shuffleTeams(selectedDay)} style={S.actionBtn}>🔄 RIMESCOLA</button>
-                <button onClick={()=>startMatchForm(selectedDay)} style={{...S.actionBtn,...S.actionPrimary}}>✅ REGISTRA PARTITA</button>
-              </div>
-            </div>
-          );})()}
+            );
+          })}
 
           {/* MATCH FORM + MVP */}
           {matchForm&&(
