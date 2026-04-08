@@ -16,18 +16,34 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const database = getDatabase(app);
 
-// Utility: Get all Mon-Fri dates for current month
+const getWeekDates = () => {
+  const now = new Date();
+  const today = now.getDay();
+  const isWeekend = today === 0 || today === 6;
+  const daysToMonday = isWeekend ? (today === 0 ? 1 : 3) : (1 - today + 7) % 7;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() + daysToMonday);
+  monday.setHours(0, 0, 0, 0);
+  
+  const dates = [];
+  for (let i = 0; i < 5; i++) {
+    const date = new Date(monday);
+    date.setDate(monday.getDate() + i);
+    dates.push(date);
+  }
+  return dates;
+};
+
 const getMonthDates = () => {
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
   const dates = [];
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
   
-  for (let day = 1; day <= daysInMonth; day++) {
-    const date = new Date(year, month, day);
-    const dayOfWeek = date.getDay();
-    if (dayOfWeek >= 1 && dayOfWeek <= 5) dates.push(date);
+  for (let d = new Date(firstDay); d <= lastDay; d.setDate(d.getDate() + 1)) {
+    dates.push(new Date(d));
   }
   return dates;
 };
@@ -45,11 +61,28 @@ const getDateId = (date) => {
   return `${year}-${month}-${day}`;
 };
 
+const getWeekId = (monday) => {
+  return getDateId(monday);
+};
+
+const isMatchDay = (date) => {
+  const day = date.getDay();
+  return day >= 1 && day <= 5;
+};
+
 const isMatchClosed = (date) => {
   const now = new Date();
   const matchTime = new Date(date);
   matchTime.setHours(19, 30, 0, 0);
   return now >= matchTime;
+};
+
+const isPastMatch = (date) => {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const matchDate = new Date(date);
+  matchDate.setHours(0, 0, 0, 0);
+  return matchDate < now;
 };
 
 const getTierInfo = (presences) => {
@@ -61,6 +94,7 @@ const getTierInfo = (presences) => {
 
 function App() {
   const [activeTab, setActiveTab] = useState('iscrizioni');
+  const [selectedWeek, setSelectedWeek] = useState(null);
   const [selectedDate, setSelectedDate] = useState(null);
   const [signups, setSignups] = useState({});
   const [playerStats, setPlayerStats] = useState({});
@@ -74,21 +108,20 @@ function App() {
   const [editingTeams, setEditingTeams] = useState(false);
   const [editedTeams, setEditedTeams] = useState(null);
   const [draggedPlayer, setDraggedPlayer] = useState(null);
+  const [hoveredDate, setHoveredDate] = useState(null);
   const [profileForm, setProfileForm] = useState({
     nickname: '', numero: '', ruolo: 'ATT', eta: '', altezza: '', peso: '', piede: 'Destro'
   });
 
   const logoTapTimeout = useRef(null);
   const teamsGenerated = useRef({});
-  const monthDates = getMonthDates();
 
   useEffect(() => {
-    if (!selectedDate && monthDates.length > 0) {
-      const today = new Date();
-      const todayMatch = monthDates.find(d => d.toDateString() === today.toDateString());
-      setSelectedDate(todayMatch || monthDates[0]);
+    if (!selectedWeek) {
+      const dates = getWeekDates();
+      setSelectedWeek(dates[0]);
     }
-  }, [monthDates.length]);
+  }, [selectedWeek]);
 
   useEffect(() => {
     const storedUsername = localStorage.getItem('faziUsername');
@@ -116,12 +149,11 @@ function App() {
     }
   };
 
-  const handleSignup = (isTitolare) => {
+  const handleSignup = (isTitolare, dateId) => {
     if (!username.trim()) return alert('Inserisci il tuo nome!');
-    if (!selectedDate) return;
 
-    const dateId = getDateId(selectedDate);
-    const closed = isMatchClosed(selectedDate);
+    const dateObj = new Date(dateId);
+    const closed = isMatchClosed(dateObj);
     if (closed && !adminMode) return alert('Iscrizioni chiuse!');
 
     const current = signups[dateId] || { titolari: [], riserve: [] };
@@ -135,10 +167,9 @@ function App() {
     set(ref(database, `signups/${dateId}/${list}`), [...current[list], username]);
   };
 
-  const handleRemoveSignup = (name, list) => {
-    if (!selectedDate) return;
-    const dateId = getDateId(selectedDate);
-    const closed = isMatchClosed(selectedDate);
+  const handleRemoveSignup = (name, list, dateId) => {
+    const dateObj = new Date(dateId);
+    const closed = isMatchClosed(dateObj);
     if (closed && !adminMode) return alert('Iscrizioni chiuse!');
 
     const current = signups[dateId] || { titolari: [], riserve: [] };
@@ -146,36 +177,45 @@ function App() {
   };
 
   const generateTeams = () => {
-    if (!selectedDate) return;
-    const dateId = getDateId(selectedDate);
-    if (teamsGenerated.current[dateId]) return;
+    if (!selectedWeek) return;
+    const weekId = getWeekId(selectedWeek);
+    if (teamsGenerated.current[weekId]) return;
 
-    const current = signups[dateId] || { titolari: [], riserve: [] };
-    if (current.titolari.length < 10) return alert('Servono almeno 10 giocatori!');
+    const weekDates = getWeekDates();
+    const allPlayers = new Set();
+    weekDates.forEach(date => {
+      const dateId = getDateId(date);
+      const current = signups[dateId] || { titolari: [] };
+      if (current.titolari.length >= 10) {
+        current.titolari.forEach(p => allPlayers.add(p));
+      }
+    });
 
-    const sorted = current.titolari.map(name => ({
+    if (allPlayers.size < 10) return alert('Servono almeno 10 giocatori unici nella settimana!');
+
+    const sorted = Array.from(allPlayers).map(name => ({
       name, presences: playerStats[name]?.gamesPlayed || 0
     })).sort((a, b) => b.presences - a.presences);
 
     const teamA = [], teamB = [];
     sorted.forEach((p, i) => (i % 2 === 0 ? teamA : teamB).push(p.name));
 
-    set(ref(database, `teams/${dateId}`), { teamA, teamB, riserve: current.riserve });
-    teamsGenerated.current[dateId] = true;
+    set(ref(database, `teams/${weekId}`), { teamA, teamB });
+    teamsGenerated.current[weekId] = true;
   };
 
   const startEditingTeams = () => {
-    if (!selectedDate) return;
-    const dateId = getDateId(selectedDate);
-    const current = teams[dateId];
+    if (!selectedWeek) return;
+    const weekId = getWeekId(selectedWeek);
+    const current = teams[weekId];
     if (!current) return alert('Genera prima le squadre!');
     setEditedTeams(JSON.parse(JSON.stringify(current)));
     setEditingTeams(true);
   };
 
   const saveEditedTeams = () => {
-    if (!selectedDate || !editedTeams) return;
-    set(ref(database, `teams/${getDateId(selectedDate)}`), editedTeams);
+    if (!selectedWeek || !editedTeams) return;
+    set(ref(database, `teams/${getWeekId(selectedWeek)}`), editedTeams);
     setEditingTeams(false);
     alert('Squadre salvate!');
   };
@@ -191,10 +231,9 @@ function App() {
     setDraggedPlayer(null);
   };
 
-  const handleRegisterResult = async () => {
-    if (!selectedDate) return;
-    const dateId = getDateId(selectedDate);
-    const currentTeams = editedTeams || teams[dateId];
+  const handleRegisterResult = async (dateId) => {
+    const weekId = getWeekId(selectedWeek);
+    const currentTeams = editedTeams || teams[weekId];
     if (!currentTeams?.teamA || !currentTeams?.teamB) return alert('Genera prima le squadre!');
 
     const scoreA = parseInt(prompt('Gol Team A:'));
@@ -247,126 +286,453 @@ function App() {
     await remove(ref(database, `players/${nickname}`));
   };
 
+  const getMatchStatus = (date) => {
+    const dateId = getDateId(date);
+    const current = signups[dateId] || { titolari: [] };
+    const match = matchHistory.find(m => m.date === dateId);
+    
+    if (match) {
+      return {
+        status: 'Confermata',
+        color: '#48BB78',
+        details: `${match.scoreA}-${match.scoreB} • MVP: ${match.mvp}`
+      };
+    }
+    
+    if (isPastMatch(date)) {
+      return {
+        status: 'Annullata',
+        color: '#E53E3E',
+        details: current.titolari.length < 10 ? `Solo ${current.titolari.length}/10` : ''
+      };
+    }
+    
+    return null;
+  };
+
   const renderIscrizioni = () => {
-    if (!selectedDate) return null;
-    const dateId = getDateId(selectedDate);
-    const current = signups[dateId] || { titolari: [], riserve: [] };
-    const closed = isMatchClosed(selectedDate);
+    const monthDates = getMonthDates();
+    const now = new Date();
+    const monthName = now.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' });
+    
+    const firstDayOfMonth = monthDates[0].getDay();
+    const offset = firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1;
 
     return (
       <div style={{ padding: '20px' }}>
-        <h2 style={{ color: '#FFD700', marginBottom: '20px', fontFamily: 'Oswald' }}>ISCRIZIONI</h2>
-        
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '25px' }}>
-          {monthDates.map(date => {
-            const id = getDateId(date);
-            const isSelected = getDateId(selectedDate) === id;
-            const isClosed = isMatchClosed(date);
+        <h2 style={{ color: '#FFD700', marginBottom: '20px', fontFamily: 'Oswald', textTransform: 'uppercase', textAlign: 'center' }}>
+          {monthName}
+        </h2>
+
+        <div style={{ marginBottom: '10px', display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '5px' }}>
+          {['L', 'M', 'M', 'G', 'V', 'S', 'D'].map((day, i) => (
+            <div key={i} style={{ textAlign: 'center', color: '#FFD700', fontFamily: 'Oswald', fontSize: '12px', padding: '5px' }}>
+              {day}
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '8px' }}>
+          {[...Array(offset)].map((_, i) => <div key={`empty-${i}`} />)}
+          
+          {monthDates.map((date, i) => {
+            const dateId = getDateId(date);
+            const isMatch = isMatchDay(date);
+            const current = signups[dateId] || { titolari: [], riserve: [] };
+            const status = getMatchStatus(date);
+            const isToday = date.toDateString() === now.toDateString();
+            const isPast = isPastMatch(date);
+            
             return (
-              <button key={id} onClick={() => setSelectedDate(date)} style={{
-                padding: '8px 12px', background: isSelected ? '#FFD700' : isClosed ? '#555' : '#2D3748',
-                color: isSelected ? '#000' : '#fff', border: 'none', borderRadius: '6px',
-                cursor: 'pointer', fontFamily: 'Oswald', fontSize: '13px',
-                fontWeight: isSelected ? 'bold' : 'normal', opacity: isClosed ? 0.7 : 1
-              }}>
-                {formatDate(date)}
-              </button>
+              <div
+                key={i}
+                onClick={() => isMatch && setSelectedDate(dateId)}
+                onMouseEnter={() => status && setHoveredDate(dateId)}
+                onMouseLeave={() => setHoveredDate(null)}
+                style={{
+                  position: 'relative',
+                  aspectRatio: '1',
+                  background: isToday ? '#FFD700' : isMatch ? (isPast ? '#444' : '#2D3748') : '#1A202C',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  cursor: isMatch ? 'pointer' : 'default',
+                  border: isToday ? '2px solid #FFA500' : 'none',
+                  opacity: isPast && !status ? 0.5 : 1,
+                  transition: 'transform 0.2s',
+                  ...(isMatch && !isPast && { ':hover': { transform: 'scale(1.05)' } })
+                }}
+              >
+                <div style={{ 
+                  fontSize: '18px', 
+                  fontFamily: 'Oswald', 
+                  fontWeight: 'bold',
+                  color: isToday ? '#000' : '#fff' 
+                }}>
+                  {date.getDate()}
+                </div>
+                
+                {isMatch && current.titolari.length > 0 && (
+                  <div style={{ 
+                    fontSize: '10px', 
+                    color: isToday ? '#000' : current.titolari.length >= 10 ? '#48BB78' : '#FFA500',
+                    fontFamily: 'Source Sans 3',
+                    fontWeight: 'bold'
+                  }}>
+                    {current.titolari.length}/10
+                  </div>
+                )}
+
+                {status && hoveredDate === dateId && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '-60px',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    background: status.color,
+                    color: '#fff',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    fontFamily: 'Source Sans 3',
+                    fontWeight: 'bold',
+                    whiteSpace: 'nowrap',
+                    zIndex: 100,
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.4)'
+                  }}>
+                    <div>{status.status}</div>
+                    {status.details && <div style={{ fontSize: '10px', marginTop: '2px' }}>{status.details}</div>}
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>
 
-        <input type="text" placeholder="Il tuo nome" value={username}
-          onChange={(e) => { setUsername(e.target.value); localStorage.setItem('faziUsername', e.target.value); }}
-          style={{ width: '100%', padding: '12px', background: '#2D3748', border: '2px solid #4A5568',
-            borderRadius: '8px', color: '#fff', fontFamily: 'Source Sans 3', fontSize: '16px', marginBottom: '15px' }}
-        />
+        {selectedDate && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.85)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 1000,
+            padding: '20px'
+          }}>
+            <div style={{
+              background: '#2D3748',
+              borderRadius: '12px',
+              padding: '30px',
+              width: '100%',
+              maxWidth: '600px',
+              maxHeight: '80vh',
+              overflow: 'auto'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                <h3 style={{ color: '#FFD700', fontFamily: 'Oswald', fontSize: '24px' }}>
+                  {formatDate(new Date(selectedDate))}
+                </h3>
+                <button
+                  onClick={() => setSelectedDate(null)}
+                  style={{
+                    background: '#E53E3E',
+                    border: 'none',
+                    color: '#fff',
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '50%',
+                    cursor: 'pointer',
+                    fontSize: '18px',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
 
-        {(!closed || adminMode) && (
-          <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-            <button onClick={() => handleSignup(true)} disabled={current.titolari.length >= 10}
-              style={{ flex: 1, padding: '15px', background: current.titolari.length >= 10 ? '#555' : 'linear-gradient(135deg, #FFD700 0%, #FFA500 100%)',
-                color: '#000', border: 'none', borderRadius: '8px', fontFamily: 'Oswald', fontSize: '16px', fontWeight: 'bold',
-                cursor: current.titolari.length >= 10 ? 'not-allowed' : 'pointer' }}>
-              TITOLARE ({current.titolari.length}/10)
-            </button>
-            <button onClick={() => handleSignup(false)} disabled={current.riserve.length >= 3}
-              style={{ flex: 1, padding: '15px', background: current.riserve.length >= 3 ? '#555' : 'linear-gradient(135deg, #C0C0C0 0%, #A8A8A8 100%)',
-                color: '#000', border: 'none', borderRadius: '8px', fontFamily: 'Oswald', fontSize: '16px', fontWeight: 'bold',
-                cursor: current.riserve.length >= 3 ? 'not-allowed' : 'pointer' }}>
-              RISERVA ({current.riserve.length}/3)
-            </button>
+              {(() => {
+                const dateObj = new Date(selectedDate);
+                const current = signups[selectedDate] || { titolari: [], riserve: [] };
+                const closed = isMatchClosed(dateObj);
+                const past = isPastMatch(dateObj);
+                const status = getMatchStatus(dateObj);
+
+                return (
+                  <>
+                    {!past && (
+                      <>
+                        <input
+                          type="text"
+                          placeholder="Il tuo nome"
+                          value={username}
+                          onChange={(e) => {
+                            setUsername(e.target.value);
+                            localStorage.setItem('faziUsername', e.target.value);
+                          }}
+                          style={{
+                            width: '100%',
+                            padding: '12px',
+                            background: '#1A202C',
+                            border: '2px solid #4A5568',
+                            borderRadius: '8px',
+                            color: '#fff',
+                            fontFamily: 'Source Sans 3',
+                            fontSize: '16px',
+                            marginBottom: '15px'
+                          }}
+                        />
+
+                        {(!closed || adminMode) && (
+                          <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+                            <button
+                              onClick={() => handleSignup(true, selectedDate)}
+                              disabled={current.titolari.length >= 10}
+                              style={{
+                                flex: 1,
+                                padding: '15px',
+                                background: current.titolari.length >= 10 ? '#555' : 'linear-gradient(135deg, #FFD700 0%, #FFA500 100%)',
+                                color: '#000',
+                                border: 'none',
+                                borderRadius: '8px',
+                                fontFamily: 'Oswald',
+                                fontSize: '16px',
+                                fontWeight: 'bold',
+                                cursor: current.titolari.length >= 10 ? 'not-allowed' : 'pointer'
+                              }}
+                            >
+                              TITOLARE ({current.titolari.length}/10)
+                            </button>
+                            <button
+                              onClick={() => handleSignup(false, selectedDate)}
+                              disabled={current.riserve.length >= 3}
+                              style={{
+                                flex: 1,
+                                padding: '15px',
+                                background: current.riserve.length >= 3 ? '#555' : 'linear-gradient(135deg, #C0C0C0 0%, #A8A8A8 100%)',
+                                color: '#000',
+                                border: 'none',
+                                borderRadius: '8px',
+                                fontFamily: 'Oswald',
+                                fontSize: '16px',
+                                fontWeight: 'bold',
+                                cursor: current.riserve.length >= 3 ? 'not-allowed' : 'pointer'
+                              }}
+                            >
+                              RISERVA ({current.riserve.length}/3)
+                            </button>
+                          </div>
+                        )}
+
+                        {closed && !adminMode && (
+                          <div style={{
+                            padding: '15px',
+                            background: '#744210',
+                            borderRadius: '8px',
+                            textAlign: 'center',
+                            fontFamily: 'Oswald',
+                            color: '#FFD700',
+                            marginBottom: '20px'
+                          }}>
+                            ISCRIZIONI CHIUSE
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {status && (
+                      <div style={{
+                        padding: '15px',
+                        background: status.color,
+                        borderRadius: '8px',
+                        textAlign: 'center',
+                        fontFamily: 'Oswald',
+                        color: '#fff',
+                        marginBottom: '20px',
+                        fontSize: '18px'
+                      }}>
+                        {status.status} {status.details && `• ${status.details}`}
+                      </div>
+                    )}
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                      <div>
+                        <h4 style={{ color: '#FFD700', marginBottom: '10px', fontFamily: 'Oswald' }}>TITOLARI</h4>
+                        {current.titolari.map((name, i) => (
+                          <div
+                            key={i}
+                            style={{
+                              padding: '10px',
+                              background: '#1A202C',
+                              marginBottom: '8px',
+                              borderRadius: '8px',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center'
+                            }}
+                          >
+                            <span style={{ fontFamily: 'Source Sans 3', color: '#fff' }}>
+                              {i + 1}. {name}
+                            </span>
+                            {(!closed || adminMode) && adminMode && !past && (
+                              <button
+                                onClick={() => handleRemoveSignup(name, 'titolari', selectedDate)}
+                                style={{
+                                  background: '#E53E3E',
+                                  border: 'none',
+                                  color: '#fff',
+                                  padding: '5px 10px',
+                                  borderRadius: '5px',
+                                  cursor: 'pointer',
+                                  fontSize: '12px'
+                                }}
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      <div>
+                        <h4 style={{ color: '#C0C0C0', marginBottom: '10px', fontFamily: 'Oswald' }}>RISERVE</h4>
+                        {current.riserve.map((name, i) => (
+                          <div
+                            key={i}
+                            style={{
+                              padding: '10px',
+                              background: '#1A202C',
+                              marginBottom: '8px',
+                              borderRadius: '8px',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center'
+                            }}
+                          >
+                            <span style={{ fontFamily: 'Source Sans 3', color: '#fff' }}>
+                              {i + 1}. {name}
+                            </span>
+                            {(!closed || adminMode) && adminMode && !past && (
+                              <button
+                                onClick={() => handleRemoveSignup(name, 'riserve', selectedDate)}
+                                style={{
+                                  background: '#E53E3E',
+                                  border: 'none',
+                                  color: '#fff',
+                                  padding: '5px 10px',
+                                  borderRadius: '5px',
+                                  cursor: 'pointer',
+                                  fontSize: '12px'
+                                }}
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
           </div>
         )}
-
-        {closed && !adminMode && (
-          <div style={{ padding: '15px', background: '#744210', borderRadius: '8px', textAlign: 'center', fontFamily: 'Oswald', color: '#FFD700', marginBottom: '20px' }}>
-            ISCRIZIONI CHIUSE
-          </div>
-        )}
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-          <div>
-            <h3 style={{ color: '#FFD700', marginBottom: '10px', fontFamily: 'Oswald' }}>TITOLARI</h3>
-            {current.titolari.map((name, i) => (
-              <div key={i} style={{ padding: '10px', background: '#2D3748', marginBottom: '8px', borderRadius: '8px',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontFamily: 'Source Sans 3', color: '#fff' }}>{i + 1}. {name}</span>
-                {(!closed || adminMode) && adminMode && (
-                  <button onClick={() => handleRemoveSignup(name, 'titolari')}
-                    style={{ background: '#E53E3E', border: 'none', color: '#fff', padding: '5px 10px',
-                      borderRadius: '5px', cursor: 'pointer', fontSize: '12px' }}>✕</button>
-                )}
-              </div>
-            ))}
-          </div>
-          <div>
-            <h3 style={{ color: '#C0C0C0', marginBottom: '10px', fontFamily: 'Oswald' }}>RISERVE</h3>
-            {current.riserve.map((name, i) => (
-              <div key={i} style={{ padding: '10px', background: '#2D3748', marginBottom: '8px', borderRadius: '8px',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontFamily: 'Source Sans 3', color: '#fff' }}>{i + 1}. {name}</span>
-                {(!closed || adminMode) && adminMode && (
-                  <button onClick={() => handleRemoveSignup(name, 'riserve')}
-                    style={{ background: '#E53E3E', border: 'none', color: '#fff', padding: '5px 10px',
-                      borderRadius: '5px', cursor: 'pointer', fontSize: '12px' }}>✕</button>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
     );
   };
 
   const renderSquadre = () => {
-    if (!selectedDate) return null;
-    const dateId = getDateId(selectedDate);
-    const currentTeams = editingTeams ? editedTeams : teams[dateId];
-    const current = signups[dateId] || { titolari: [] };
+    if (!selectedWeek) return null;
+    const weekId = getWeekId(selectedWeek);
+    const weekDates = getWeekDates();
+    const currentTeams = editingTeams ? editedTeams : teams[weekId];
 
     return (
       <div style={{ padding: '20px' }}>
-        <h2 style={{ color: '#FFD700', marginBottom: '20px', fontFamily: 'Oswald' }}>SQUADRE - {formatDate(selectedDate)}</h2>
+        <h2 style={{ color: '#FFD700', marginBottom: '20px', fontFamily: 'Oswald' }}>SQUADRE</h2>
+
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
+          {weekDates.map((date, i) => (
+            <button
+              key={i}
+              onClick={() => setSelectedWeek(date)}
+              style={{
+                padding: '10px 15px',
+                background: getWeekId(date) === weekId ? '#FFD700' : '#2D3748',
+                color: getWeekId(date) === weekId ? '#000' : '#fff',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontFamily: 'Oswald',
+                fontSize: '14px'
+              }}
+            >
+              Sett. {formatDate(date).split(' ')[2]}
+            </button>
+          ))}
+        </div>
 
         {!currentTeams && (
-          <button onClick={generateTeams} disabled={current.titolari.length < 10}
-            style={{ width: '100%', padding: '15px', background: current.titolari.length < 10 ? '#555' : 'linear-gradient(135deg, #FFD700 0%, #FFA500 100%)',
-              color: '#000', border: 'none', borderRadius: '8px', fontFamily: 'Oswald', fontSize: '18px', fontWeight: 'bold',
-              cursor: current.titolari.length < 10 ? 'not-allowed' : 'pointer', marginBottom: '20px' }}>
+          <button
+            onClick={generateTeams}
+            style={{
+              width: '100%',
+              padding: '15px',
+              background: 'linear-gradient(135deg, #FFD700 0%, #FFA500 100%)',
+              color: '#000',
+              border: 'none',
+              borderRadius: '8px',
+              fontFamily: 'Oswald',
+              fontSize: '18px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              marginBottom: '20px'
+            }}
+          >
             GENERA SQUADRE
           </button>
         )}
 
         {currentTeams && !editingTeams && adminMode && (
           <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-            <button onClick={startEditingTeams}
-              style={{ flex: 1, padding: '12px', background: '#3182CE', color: '#fff', border: 'none',
-                borderRadius: '8px', fontFamily: 'Oswald', cursor: 'pointer' }}>
+            <button
+              onClick={startEditingTeams}
+              style={{
+                flex: 1,
+                padding: '12px',
+                background: '#3182CE',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '8px',
+                fontFamily: 'Oswald',
+                cursor: 'pointer'
+              }}
+            >
               MODIFICA SQUADRE
             </button>
-            <button onClick={handleRegisterResult}
-              style={{ flex: 1, padding: '12px', background: 'linear-gradient(135deg, #48BB78 0%, #38A169 100%)',
-                color: '#fff', border: 'none', borderRadius: '8px', fontFamily: 'Oswald', fontWeight: 'bold', cursor: 'pointer' }}>
+            <button
+              onClick={() => {
+                const dateId = prompt('Inserisci data partita (YYYY-MM-DD):');
+                if (dateId) handleRegisterResult(dateId);
+              }}
+              style={{
+                flex: 1,
+                padding: '12px',
+                background: 'linear-gradient(135deg, #48BB78 0%, #38A169 100%)',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '8px',
+                fontFamily: 'Oswald',
+                fontWeight: 'bold',
+                cursor: 'pointer'
+              }}
+            >
               REGISTRA RISULTATO
             </button>
           </div>
@@ -374,52 +740,105 @@ function App() {
 
         {editingTeams && (
           <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-            <button onClick={saveEditedTeams}
-              style={{ flex: 1, padding: '12px', background: '#48BB78', color: '#fff', border: 'none',
-                borderRadius: '8px', fontFamily: 'Oswald', cursor: 'pointer' }}>SALVA MODIFICHE</button>
-            <button onClick={() => { setEditingTeams(false); setEditedTeams(null); }}
-              style={{ flex: 1, padding: '12px', background: '#E53E3E', color: '#fff', border: 'none',
-                borderRadius: '8px', fontFamily: 'Oswald', cursor: 'pointer' }}>ANNULLA</button>
+            <button
+              onClick={saveEditedTeams}
+              style={{
+                flex: 1,
+                padding: '12px',
+                background: '#48BB78',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '8px',
+                fontFamily: 'Oswald',
+                cursor: 'pointer'
+              }}
+            >
+              SALVA MODIFICHE
+            </button>
+            <button
+              onClick={() => {
+                setEditingTeams(false);
+                setEditedTeams(null);
+              }}
+              style={{
+                flex: 1,
+                padding: '12px',
+                background: '#E53E3E',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '8px',
+                fontFamily: 'Oswald',
+                cursor: 'pointer'
+              }}
+            >
+              ANNULLA
+            </button>
           </div>
         )}
 
         {currentTeams && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-            <div onDragOver={(e) => e.preventDefault()} onDrop={() => editingTeams && handleDrop('teamA')}
-              style={{ padding: '20px', background: editingTeams ? '#2C5282' : '#2D3748', borderRadius: '12px',
-                border: editingTeams ? '2px dashed #FFD700' : 'none' }}>
+            <div
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={() => editingTeams && handleDrop('teamA')}
+              style={{
+                padding: '20px',
+                background: editingTeams ? '#2C5282' : '#2D3748',
+                borderRadius: '12px',
+                border: editingTeams ? '2px dashed #FFD700' : 'none'
+              }}
+            >
               <h3 style={{ color: '#FFD700', marginBottom: '15px', fontFamily: 'Oswald' }}>TEAM A</h3>
-              {currentTeams.teamA.map((player, i) => (
-                <div key={i} draggable={editingTeams} onDragStart={() => handleDragStart(player, 'teamA')}
-                  style={{ padding: '12px', background: '#1A202C', marginBottom: '8px', borderRadius: '8px',
-                    fontFamily: 'Source Sans 3', color: '#fff', cursor: editingTeams ? 'move' : 'default' }}>
+              {currentTeams.teamA?.map((player, i) => (
+                <div
+                  key={i}
+                  draggable={editingTeams}
+                  onDragStart={() => handleDragStart(player, 'teamA')}
+                  style={{
+                    padding: '12px',
+                    background: '#1A202C',
+                    marginBottom: '8px',
+                    borderRadius: '8px',
+                    fontFamily: 'Source Sans 3',
+                    color: '#fff',
+                    cursor: editingTeams ? 'move' : 'default'
+                  }}
+                >
                   {i + 1}. {player}
                 </div>
               ))}
             </div>
-            <div onDragOver={(e) => e.preventDefault()} onDrop={() => editingTeams && handleDrop('teamB')}
-              style={{ padding: '20px', background: editingTeams ? '#2C5282' : '#2D3748', borderRadius: '12px',
-                border: editingTeams ? '2px dashed #C0C0C0' : 'none' }}>
-              <h3 style={{ color: '#C0C0C0', marginBottom: '15px', fontFamily: 'Oswald' }}>TEAM B</h3>
-              {currentTeams.teamB.map((player, i) => (
-                <div key={i} draggable={editingTeams} onDragStart={() => handleDragStart(player, 'teamB')}
-                  style={{ padding: '12px', background: '#1A202C', marginBottom: '8px', borderRadius: '8px',
-                    fontFamily: 'Source Sans 3', color: '#fff', cursor: editingTeams ? 'move' : 'default' }}>
-                  {i + 1}. {player}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
-        {currentTeams?.riserve?.length > 0 && (
-          <div style={{ marginTop: '20px', padding: '15px', background: '#2D3748', borderRadius: '12px' }}>
-            <h3 style={{ color: '#C0C0C0', marginBottom: '10px', fontFamily: 'Oswald' }}>RISERVE</h3>
-            {currentTeams.riserve.map((player, i) => (
-              <div key={i} style={{ padding: '8px', color: '#fff', fontFamily: 'Source Sans 3' }}>
-                {i + 1}. {player}
-              </div>
-            ))}
+            <div
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={() => editingTeams && handleDrop('teamB')}
+              style={{
+                padding: '20px',
+                background: editingTeams ? '#2C5282' : '#2D3748',
+                borderRadius: '12px',
+                border: editingTeams ? '2px dashed #C0C0C0' : 'none'
+              }}
+            >
+              <h3 style={{ color: '#C0C0C0', marginBottom: '15px', fontFamily: 'Oswald' }}>TEAM B</h3>
+              {currentTeams.teamB?.map((player, i) => (
+                <div
+                  key={i}
+                  draggable={editingTeams}
+                  onDragStart={() => handleDragStart(player, 'teamB')}
+                  style={{
+                    padding: '12px',
+                    background: '#1A202C',
+                    marginBottom: '8px',
+                    borderRadius: '8px',
+                    fontFamily: 'Source Sans 3',
+                    color: '#fff',
+                    cursor: editingTeams ? 'move' : 'default'
+                  }}
+                >
+                  {i + 1}. {player}
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -427,50 +846,125 @@ function App() {
   };
 
   const renderCarriere = () => {
-    const sorted = Object.entries(players).map(([nickname, data]) => ({
-      nickname, ...data,
-      presences: playerStats[nickname]?.gamesPlayed || 0,
-      wins: playerStats[nickname]?.wins || 0,
-      mvps: playerStats[nickname]?.mvpCount || 0
-    })).sort((a, b) => b.presences - a.presences);
+    const sorted = Object.entries(players)
+      .map(([nickname, data]) => ({
+        nickname,
+        ...data,
+        presences: playerStats[nickname]?.gamesPlayed || 0,
+        wins: playerStats[nickname]?.wins || 0,
+        mvps: playerStats[nickname]?.mvpCount || 0
+      }))
+      .sort((a, b) => b.presences - a.presences);
 
     return (
       <div style={{ padding: '20px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <h2 style={{ color: '#FFD700', fontFamily: 'Oswald' }}>CARRIERE</h2>
-          <button onClick={() => setShowProfileModal(true)}
-            style={{ padding: '10px 20px', background: 'linear-gradient(135deg, #FFD700 0%, #FFA500 100%)',
-              color: '#000', border: 'none', borderRadius: '8px', fontFamily: 'Oswald', fontWeight: 'bold', cursor: 'pointer' }}>
+          <button
+            onClick={() => setShowProfileModal(true)}
+            style={{
+              padding: '10px 20px',
+              background: 'linear-gradient(135deg, #FFD700 0%, #FFA500 100%)',
+              color: '#000',
+              border: 'none',
+              borderRadius: '8px',
+              fontFamily: 'Oswald',
+              fontWeight: 'bold',
+              cursor: 'pointer'
+            }}
+          >
             + CREA PROFILO
           </button>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '20px' }}>
-          {sorted.map(p => {
+          {sorted.map((p) => {
             const tier = getTierInfo(p.presences);
             return (
-              <div key={p.nickname} style={{ background: tier.gradient, borderRadius: '12px', padding: '20px',
-                textAlign: 'center', position: 'relative', boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>
+              <div
+                key={p.nickname}
+                style={{
+                  background: tier.gradient,
+                  borderRadius: '12px',
+                  padding: '20px',
+                  textAlign: 'center',
+                  position: 'relative',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+                }}
+              >
                 {adminMode && (
-                  <button onClick={() => handleDeletePlayer(p.nickname)}
-                    style={{ position: 'absolute', top: '10px', right: '10px', background: '#E53E3E', border: 'none',
-                      color: '#fff', width: '24px', height: '24px', borderRadius: '50%', cursor: 'pointer',
-                      fontSize: '14px', fontWeight: 'bold' }}>✕</button>
+                  <button
+                    onClick={() => handleDeletePlayer(p.nickname)}
+                    style={{
+                      position: 'absolute',
+                      top: '10px',
+                      right: '10px',
+                      background: '#E53E3E',
+                      border: 'none',
+                      color: '#fff',
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '50%',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    ✕
+                  </button>
                 )}
-                <div style={{ fontSize: '48px', fontFamily: 'Oswald', fontWeight: 'bold', color: '#000', marginBottom: '5px' }}>
+                <div
+                  style={{
+                    fontSize: '48px',
+                    fontFamily: 'Oswald',
+                    fontWeight: 'bold',
+                    color: '#000',
+                    marginBottom: '5px'
+                  }}
+                >
                   {p.numero}
                 </div>
-                <div style={{ fontSize: '24px', fontFamily: 'Oswald', fontWeight: 'bold', color: '#000', marginBottom: '10px' }}>
+                <div
+                  style={{
+                    fontSize: '24px',
+                    fontFamily: 'Oswald',
+                    fontWeight: 'bold',
+                    color: '#000',
+                    marginBottom: '10px'
+                  }}
+                >
                   {p.nickname}
                 </div>
-                <div style={{ fontSize: '12px', color: '#000', marginBottom: '15px', fontFamily: 'Source Sans 3', fontWeight: '600' }}>
+                <div
+                  style={{
+                    fontSize: '12px',
+                    color: '#000',
+                    marginBottom: '15px',
+                    fontFamily: 'Source Sans 3',
+                    fontWeight: '600'
+                  }}
+                >
                   {p.ruolo} • {tier.name}
                 </div>
-                <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', padding: '10px', fontSize: '12px',
-                  color: '#000', fontFamily: 'Source Sans 3' }}>
-                  <div><strong>{p.presences}</strong> presenze</div>
-                  <div><strong>{p.wins}</strong> vittorie</div>
-                  <div><strong>{p.mvps}</strong> MVP</div>
+                <div
+                  style={{
+                    background: 'rgba(0,0,0,0.2)',
+                    borderRadius: '8px',
+                    padding: '10px',
+                    fontSize: '12px',
+                    color: '#000',
+                    fontFamily: 'Source Sans 3'
+                  }}
+                >
+                  <div>
+                    <strong>{p.presences}</strong> presenze
+                  </div>
+                  <div>
+                    <strong>{p.wins}</strong> vittorie
+                  </div>
+                  <div>
+                    <strong>{p.mvps}</strong> MVP
+                  </div>
                   <div style={{ marginTop: '5px', fontSize: '11px' }}>
                     {p.eta}y • {p.altezza}cm • {p.peso}kg • {p.piede}
                   </div>
@@ -488,20 +982,43 @@ function App() {
     return (
       <div style={{ padding: '20px' }}>
         <h2 style={{ color: '#FFD700', marginBottom: '20px', fontFamily: 'Oswald' }}>STORICO</h2>
-        {sorted.map(m => (
-          <div key={m.id} style={{ background: '#2D3748', padding: '20px', borderRadius: '12px', marginBottom: '15px' }}>
-            <div style={{ color: '#FFD700', fontFamily: 'Oswald', fontSize: '18px', marginBottom: '10px' }}>{m.date}</div>
-            <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center', marginBottom: '15px' }}>
+        {sorted.map((m) => (
+          <div
+            key={m.id}
+            style={{ background: '#2D3748', padding: '20px', borderRadius: '12px', marginBottom: '15px' }}
+          >
+            <div style={{ color: '#FFD700', fontFamily: 'Oswald', fontSize: '18px', marginBottom: '10px' }}>
+              {m.date}
+            </div>
+            <div
+              style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center', marginBottom: '15px' }}
+            >
               <div style={{ textAlign: 'center' }}>
                 <div style={{ color: '#FFD700', fontFamily: 'Oswald', fontSize: '14px' }}>TEAM A</div>
-                <div style={{ fontSize: '36px', fontFamily: 'Oswald', fontWeight: 'bold',
-                  color: m.winner === 'A' ? '#48BB78' : '#fff' }}>{m.scoreA}</div>
+                <div
+                  style={{
+                    fontSize: '36px',
+                    fontFamily: 'Oswald',
+                    fontWeight: 'bold',
+                    color: m.winner === 'A' ? '#48BB78' : '#fff'
+                  }}
+                >
+                  {m.scoreA}
+                </div>
               </div>
               <div style={{ color: '#fff', fontSize: '24px' }}>-</div>
               <div style={{ textAlign: 'center' }}>
                 <div style={{ color: '#C0C0C0', fontFamily: 'Oswald', fontSize: '14px' }}>TEAM B</div>
-                <div style={{ fontSize: '36px', fontFamily: 'Oswald', fontWeight: 'bold',
-                  color: m.winner === 'B' ? '#48BB78' : '#fff' }}>{m.scoreB}</div>
+                <div
+                  style={{
+                    fontSize: '36px',
+                    fontFamily: 'Oswald',
+                    fontWeight: 'bold',
+                    color: m.winner === 'B' ? '#48BB78' : '#fff'
+                  }}
+                >
+                  {m.scoreB}
+                </div>
               </div>
             </div>
             <div style={{ textAlign: 'center', color: '#FFD700', fontFamily: 'Oswald', fontSize: '16px' }}>
@@ -514,14 +1031,28 @@ function App() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #1a4d2e 0%, #0f2818 100%)',
-      fontFamily: 'Source Sans 3, sans-serif', paddingBottom: '140px' }}>
-      <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;700&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet" />
-      
+    <div
+      style={{
+        minHeight: '100vh',
+        background: 'linear-gradient(135deg, #1a4d2e 0%, #0f2818 100%)',
+        fontFamily: 'Source Sans 3, sans-serif',
+        paddingBottom: '140px'
+      }}
+    >
+      <link
+        href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;700&family=Source+Sans+3:wght@400;600;700&display=swap"
+        rel="stylesheet"
+      />
+
       <div style={{ padding: '20px', textAlign: 'center', borderBottom: '2px solid #FFD700' }}>
         <div onClick={handleLogoTap} style={{ cursor: 'pointer', display: 'inline-block' }}>
           <svg width="120" height="140" viewBox="0 0 120 140" style={{ filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.3))' }}>
-            <path d="M60 10 L110 45 L110 115 L60 130 L10 115 L10 45 Z" fill="url(#shieldGradient)" stroke="#FFD700" strokeWidth="2"/>
+            <path
+              d="M60 10 L110 45 L110 115 L60 130 L10 115 L10 45 Z"
+              fill="url(#shieldGradient)"
+              stroke="#FFD700"
+              strokeWidth="2"
+            />
             <defs>
               <linearGradient id="shieldGradient" x1="0%" y1="0%" x2="0%" y2="100%">
                 <stop offset="0%" style={{ stopColor: '#1a4d2e', stopOpacity: 1 }} />
@@ -536,20 +1067,50 @@ function App() {
                 <stop offset="100%" style={{ stopColor: '#C0C0C0', stopOpacity: 1 }} />
               </linearGradient>
             </defs>
-            <text x="60" y="65" fontFamily="Oswald" fontSize="28" fontWeight="bold" fill="url(#goldGradient)" textAnchor="middle">FAZI</text>
-            <text x="60" y="95" fontFamily="Oswald" fontSize="24" fontWeight="bold" fill="url(#silverGradient)" textAnchor="middle">LEAGUE</text>
+            <text x="60" y="65" fontFamily="Oswald" fontSize="28" fontWeight="bold" fill="url(#goldGradient)" textAnchor="middle">
+              FAZI
+            </text>
+            <text x="60" y="95" fontFamily="Oswald" fontSize="24" fontWeight="bold" fill="url(#silverGradient)" textAnchor="middle">
+              LEAGUE
+            </text>
           </svg>
         </div>
-        {adminMode && <div style={{ marginTop: '10px', color: '#E53E3E', fontFamily: 'Oswald', fontSize: '14px', fontWeight: 'bold' }}>ADMIN MODE</div>}
+        {adminMode && (
+          <div style={{ marginTop: '10px', color: '#E53E3E', fontFamily: 'Oswald', fontSize: '14px', fontWeight: 'bold' }}>
+            ADMIN MODE
+          </div>
+        )}
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-around', padding: '15px', borderBottom: '2px solid #2D3748',
-        position: 'sticky', top: 0, background: 'linear-gradient(135deg, #1a4d2e 0%, #0f2818 100%)', zIndex: 100 }}>
-        {['iscrizioni', 'squadre', 'carriere', 'storico'].map(tab => (
-          <button key={tab} onClick={() => setActiveTab(tab)}
-            style={{ background: activeTab === tab ? 'linear-gradient(135deg, #FFD700 0%, #FFA500 100%)' : 'transparent',
-              color: activeTab === tab ? '#000' : '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px',
-              fontFamily: 'Oswald', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', textTransform: 'uppercase' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-around',
+          padding: '15px',
+          borderBottom: '2px solid #2D3748',
+          position: 'sticky',
+          top: 0,
+          background: 'linear-gradient(135deg, #1a4d2e 0%, #0f2818 100%)',
+          zIndex: 100
+        }}
+      >
+        {['iscrizioni', 'squadre', 'carriere', 'storico'].map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            style={{
+              background: activeTab === tab ? 'linear-gradient(135deg, #FFD700 0%, #FFA500 100%)' : 'transparent',
+              color: activeTab === tab ? '#000' : '#fff',
+              border: 'none',
+              padding: '10px 20px',
+              borderRadius: '8px',
+              fontFamily: 'Oswald',
+              fontSize: '16px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              textTransform: 'uppercase'
+            }}
+          >
             {tab}
           </button>
         ))}
@@ -563,47 +1124,148 @@ function App() {
       </div>
 
       {showProfileModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)',
-          display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.8)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 1000
+          }}
+        >
           <div style={{ background: '#2D3748', padding: '30px', borderRadius: '12px', width: '90%', maxWidth: '400px' }}>
             <h2 style={{ color: '#FFD700', marginBottom: '20px', fontFamily: 'Oswald' }}>CREA PROFILO</h2>
-            {['nickname', 'numero', 'eta', 'altezza', 'peso'].map(field => (
-              <input key={field} type={field === 'nickname' ? 'text' : 'number'} placeholder={field.charAt(0).toUpperCase() + field.slice(1)}
-                value={profileForm[field]} onChange={(e) => setProfileForm({...profileForm, [field]: e.target.value})}
-                style={{ width: '100%', padding: '12px', marginBottom: '15px', background: '#1A202C', border: '2px solid #4A5568',
-                  borderRadius: '8px', color: '#fff', fontFamily: 'Source Sans 3', fontSize: '16px' }} />
+            {['nickname', 'numero', 'eta', 'altezza', 'peso'].map((field) => (
+              <input
+                key={field}
+                type={field === 'nickname' ? 'text' : 'number'}
+                placeholder={field.charAt(0).toUpperCase() + field.slice(1)}
+                value={profileForm[field]}
+                onChange={(e) => setProfileForm({ ...profileForm, [field]: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  marginBottom: '15px',
+                  background: '#1A202C',
+                  border: '2px solid #4A5568',
+                  borderRadius: '8px',
+                  color: '#fff',
+                  fontFamily: 'Source Sans 3',
+                  fontSize: '16px'
+                }}
+              />
             ))}
-            <select value={profileForm.ruolo} onChange={(e) => setProfileForm({...profileForm, ruolo: e.target.value})}
-              style={{ width: '100%', padding: '12px', marginBottom: '15px', background: '#1A202C', border: '2px solid #4A5568',
-                borderRadius: '8px', color: '#fff', fontFamily: 'Source Sans 3', fontSize: '16px' }}>
-              <option>ATT</option><option>CEN</option><option>DIF</option><option>POR</option>
+            <select
+              value={profileForm.ruolo}
+              onChange={(e) => setProfileForm({ ...profileForm, ruolo: e.target.value })}
+              style={{
+                width: '100%',
+                padding: '12px',
+                marginBottom: '15px',
+                background: '#1A202C',
+                border: '2px solid #4A5568',
+                borderRadius: '8px',
+                color: '#fff',
+                fontFamily: 'Source Sans 3',
+                fontSize: '16px'
+              }}
+            >
+              <option>ATT</option>
+              <option>CEN</option>
+              <option>DIF</option>
+              <option>POR</option>
             </select>
-            <select value={profileForm.piede} onChange={(e) => setProfileForm({...profileForm, piede: e.target.value})}
-              style={{ width: '100%', padding: '12px', marginBottom: '15px', background: '#1A202C', border: '2px solid #4A5568',
-                borderRadius: '8px', color: '#fff', fontFamily: 'Source Sans 3', fontSize: '16px' }}>
-              <option>Destro</option><option>Sinistro</option><option>Ambidestro</option>
+            <select
+              value={profileForm.piede}
+              onChange={(e) => setProfileForm({ ...profileForm, piede: e.target.value })}
+              style={{
+                width: '100%',
+                padding: '12px',
+                marginBottom: '15px',
+                background: '#1A202C',
+                border: '2px solid #4A5568',
+                borderRadius: '8px',
+                color: '#fff',
+                fontFamily: 'Source Sans 3',
+                fontSize: '16px'
+              }}
+            >
+              <option>Destro</option>
+              <option>Sinistro</option>
+              <option>Ambidestro</option>
             </select>
             <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-              <button onClick={handleSaveProfile}
-                style={{ flex: 1, padding: '12px', background: 'linear-gradient(135deg, #FFD700 0%, #FFA500 100%)',
-                  color: '#000', border: 'none', borderRadius: '8px', fontFamily: 'Oswald', fontWeight: 'bold', cursor: 'pointer' }}>
+              <button
+                onClick={handleSaveProfile}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  background: 'linear-gradient(135deg, #FFD700 0%, #FFA500 100%)',
+                  color: '#000',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontFamily: 'Oswald',
+                  fontWeight: 'bold',
+                  cursor: 'pointer'
+                }}
+              >
                 SALVA
               </button>
-              <button onClick={() => setShowProfileModal(false)}
-                style={{ flex: 1, padding: '12px', background: '#E53E3E', color: '#fff', border: 'none',
-                  borderRadius: '8px', fontFamily: 'Oswald', cursor: 'pointer' }}>ANNULLA</button>
+              <button
+                onClick={() => setShowProfileModal(false)}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  background: '#E53E3E',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontFamily: 'Oswald',
+                  cursor: 'pointer'
+                }}
+              >
+                ANNULLA
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'linear-gradient(180deg, transparent 0%, #0a1f14 20%)',
-        padding: '20px', borderTop: '1px solid #FFD700' }}>
-        <div style={{ maxWidth: '800px', margin: '0 auto', color: '#C0C0C0', fontSize: '13px',
-          fontFamily: 'Source Sans 3', lineHeight: '1.6' }}>
-          <p style={{ marginBottom: '8px' }}>📋 <strong>Iscrizioni:</strong> Chiusura ore 19:30. Max 10 titolari + 3 riserve.</p>
-          <p style={{ marginBottom: '8px' }}>⚖️ <strong>Squadre:</strong> Bilanciamento automatico basato su presenze (snake draft).</p>
-          <p style={{ marginBottom: '0' }}>🏆 <strong>Tier:</strong> ROOKIE (0-9) → VETERANO (10-49) → ELITE (50-99) → LEGGENDA (100+)</p>
+      <div
+        style={{
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          background: 'linear-gradient(180deg, transparent 0%, #0a1f14 20%)',
+          padding: '20px',
+          borderTop: '1px solid #FFD700'
+        }}
+      >
+        <div
+          style={{
+            maxWidth: '800px',
+            margin: '0 auto',
+            color: '#C0C0C0',
+            fontSize: '13px',
+            fontFamily: 'Source Sans 3',
+            lineHeight: '1.6'
+          }}
+        >
+          <p style={{ marginBottom: '8px' }}>
+            📋 <strong>Iscrizioni:</strong> Chiusura ore 19:30. Max 10 titolari + 3 riserve.
+          </p>
+          <p style={{ marginBottom: '8px' }}>
+            ⚖️ <strong>Squadre:</strong> Bilanciamento automatico basato su presenze (snake draft).
+          </p>
+          <p style={{ marginBottom: '0' }}>
+            🏆 <strong>Tier:</strong> ROOKIE (0-9) → VETERANO (10-49) → ELITE (50-99) → LEGGENDA (100+)
+          </p>
         </div>
       </div>
     </div>
