@@ -34,20 +34,6 @@ const getWeekDates = () => {
   return dates;
 };
 
-const getMonthDates = () => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  const firstDay = new Date(year, month, 1);
-  const lastDay = new Date(year, month + 1, 0);
-  const dates = [];
-  
-  for (let d = new Date(firstDay); d <= lastDay; d.setDate(d.getDate() + 1)) {
-    dates.push(new Date(d));
-  }
-  return dates;
-};
-
 const formatDate = (date) => {
   const days = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
   const months = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
@@ -65,24 +51,11 @@ const getWeekId = (monday) => {
   return getDateId(monday);
 };
 
-const isMatchDay = (date) => {
-  const day = date.getDay();
-  return day >= 1 && day <= 5;
-};
-
 const isMatchClosed = (date) => {
   const now = new Date();
   const matchTime = new Date(date);
   matchTime.setHours(19, 30, 0, 0);
   return now >= matchTime;
-};
-
-const isPastMatch = (date) => {
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
-  const matchDate = new Date(date);
-  matchDate.setHours(0, 0, 0, 0);
-  return matchDate < now;
 };
 
 const getTierInfo = (presences) => {
@@ -95,7 +68,6 @@ const getTierInfo = (presences) => {
 function App() {
   const [activeTab, setActiveTab] = useState('iscrizioni');
   const [selectedWeek, setSelectedWeek] = useState(null);
-  const [selectedDate, setSelectedDate] = useState(null);
   const [signups, setSignups] = useState({});
   const [playerStats, setPlayerStats] = useState({});
   const [matchHistory, setMatchHistory] = useState([]);
@@ -108,7 +80,6 @@ function App() {
   const [editingTeams, setEditingTeams] = useState(false);
   const [editedTeams, setEditedTeams] = useState(null);
   const [draggedPlayer, setDraggedPlayer] = useState(null);
-  const [hoveredDate, setHoveredDate] = useState(null);
   const [profileForm, setProfileForm] = useState({
     nickname: '', numero: '', ruolo: 'ATT', eta: '', altezza: '', peso: '', piede: 'Destro'
   });
@@ -149,27 +120,36 @@ function App() {
     }
   };
 
-  const handleSignup = (isTitolare, dateId) => {
+  const handleSignup = (dayKey) => {
     if (!username.trim()) return alert('Inserisci il tuo nome!');
+    if (!selectedWeek) return;
 
-    const dateObj = new Date(dateId);
-    const closed = isMatchClosed(dateObj);
+    const weekDates = getWeekDates();
+    const dayIndex = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'].indexOf(dayKey);
+    const targetDate = weekDates[dayIndex];
+    const dateId = getDateId(targetDate);
+    const closed = isMatchClosed(targetDate);
+    
     if (closed && !adminMode) return alert('Iscrizioni chiuse!');
 
     const current = signups[dateId] || { titolari: [], riserve: [] };
     const all = [...current.titolari, ...current.riserve];
     if (all.includes(username)) return alert('Sei già iscritto!');
 
-    const list = isTitolare ? 'titolari' : 'riserve';
-    if (isTitolare && current.titolari.length >= 10) return alert('Titolari pieni!');
-    if (!isTitolare && current.riserve.length >= 3) return alert('Riserve piene!');
-
-    set(ref(database, `signups/${dateId}/${list}`), [...current[list], username]);
+    if (current.titolari.length < 10) {
+      set(ref(database, `signups/${dateId}/titolari`), [...current.titolari, username]);
+    } else if (current.riserve.length < 3) {
+      set(ref(database, `signups/${dateId}/riserve`), [...current.riserve, username]);
+    } else {
+      alert('Liste piene!');
+    }
   };
 
   const handleRemoveSignup = (name, list, dateId) => {
-    const dateObj = new Date(dateId);
-    const closed = isMatchClosed(dateObj);
+    const weekDates = getWeekDates();
+    const targetDate = new Date(dateId);
+    const closed = isMatchClosed(targetDate);
+    
     if (closed && !adminMode) return alert('Iscrizioni chiuse!');
 
     const current = signups[dateId] || { titolari: [], riserve: [] };
@@ -286,363 +266,179 @@ function App() {
     await remove(ref(database, `players/${nickname}`));
   };
 
-  const getMatchStatus = (date) => {
-    const dateId = getDateId(date);
-    const current = signups[dateId] || { titolari: [] };
-    const match = matchHistory.find(m => m.date === dateId);
-    
-    if (match) {
-      return {
-        status: 'Confermata',
-        color: '#48BB78',
-        details: `${match.scoreA}-${match.scoreB} • MVP: ${match.mvp}`
-      };
-    }
-    
-    if (isPastMatch(date)) {
-      return {
-        status: 'Annullata',
-        color: '#E53E3E',
-        details: current.titolari.length < 10 ? `Solo ${current.titolari.length}/10` : ''
-      };
-    }
-    
-    return null;
-  };
-
   const renderIscrizioni = () => {
-    const monthDates = getMonthDates();
-    const now = new Date();
-    const monthName = now.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' });
-    
-    const firstDayOfMonth = monthDates[0].getDay();
-    const offset = firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1;
+    const weekDates = getWeekDates();
+    const dayNames = ['Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì'];
+    const dayKeys = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
 
     return (
       <div style={{ padding: '20px' }}>
-        <h2 style={{ color: '#FFD700', marginBottom: '20px', fontFamily: 'Oswald', textTransform: 'uppercase', textAlign: 'center' }}>
-          {monthName}
-        </h2>
-
-        <div style={{ marginBottom: '10px', display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '5px' }}>
-          {['L', 'M', 'M', 'G', 'V', 'S', 'D'].map((day, i) => (
-            <div key={i} style={{ textAlign: 'center', color: '#FFD700', fontFamily: 'Oswald', fontSize: '12px', padding: '5px' }}>
-              {day}
-            </div>
-          ))}
+        <h2 style={{ color: '#FFD700', marginBottom: '20px', fontFamily: 'Oswald' }}>ISCRIZIONI</h2>
+        
+        <div style={{ marginBottom: '20px' }}>
+          <input
+            type="text"
+            placeholder="Il tuo nome"
+            value={username}
+            onChange={(e) => {
+              setUsername(e.target.value);
+              localStorage.setItem('faziUsername', e.target.value);
+            }}
+            style={{
+              width: '100%',
+              padding: '12px',
+              background: '#2D3748',
+              border: '2px solid #4A5568',
+              borderRadius: '8px',
+              color: '#fff',
+              fontFamily: 'Source Sans 3',
+              fontSize: '16px',
+              marginBottom: '15px'
+            }}
+          />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '8px' }}>
-          {[...Array(offset)].map((_, i) => <div key={`empty-${i}`} />)}
-          
-          {monthDates.map((date, i) => {
+        <div style={{ display: 'grid', gap: '20px' }}>
+          {weekDates.map((date, i) => {
             const dateId = getDateId(date);
-            const isMatch = isMatchDay(date);
+            const dayKey = dayKeys[i];
             const current = signups[dateId] || { titolari: [], riserve: [] };
-            const status = getMatchStatus(date);
-            const isToday = date.toDateString() === now.toDateString();
-            const isPast = isPastMatch(date);
-            
+            const closed = isMatchClosed(date);
+
             return (
-              <div
-                key={i}
-                onClick={() => isMatch && setSelectedDate(dateId)}
-                onMouseEnter={() => status && setHoveredDate(dateId)}
-                onMouseLeave={() => setHoveredDate(null)}
-                style={{
-                  position: 'relative',
-                  aspectRatio: '1',
-                  background: isToday ? '#FFD700' : isMatch ? (isPast ? '#444' : '#2D3748') : '#1A202C',
-                  borderRadius: '8px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  cursor: isMatch ? 'pointer' : 'default',
-                  border: isToday ? '2px solid #FFA500' : 'none',
-                  opacity: isPast && !status ? 0.5 : 1,
-                  transition: 'transform 0.2s',
-                  ...(isMatch && !isPast && { ':hover': { transform: 'scale(1.05)' } })
-                }}
-              >
-                <div style={{ 
-                  fontSize: '18px', 
-                  fontFamily: 'Oswald', 
-                  fontWeight: 'bold',
-                  color: isToday ? '#000' : '#fff' 
-                }}>
-                  {date.getDate()}
-                </div>
-                
-                {isMatch && current.titolari.length > 0 && (
-                  <div style={{ 
-                    fontSize: '10px', 
-                    color: isToday ? '#000' : current.titolari.length >= 10 ? '#48BB78' : '#FFA500',
-                    fontFamily: 'Source Sans 3',
-                    fontWeight: 'bold'
+              <div key={i} style={{
+                background: '#2D3748',
+                borderRadius: '12px',
+                padding: '20px',
+                border: closed ? '2px solid #744210' : '2px solid #4A5568'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                  <h3 style={{ color: '#FFD700', fontFamily: 'Oswald', margin: 0 }}>
+                    {dayNames[i]} {date.getDate()}/{date.getMonth() + 1}
+                  </h3>
+                  <span style={{
+                    background: current.titolari.length >= 10 ? '#48BB78' : '#555',
+                    color: '#fff',
+                    padding: '5px 12px',
+                    borderRadius: '12px',
+                    fontFamily: 'Oswald',
+                    fontSize: '14px'
                   }}>
                     {current.titolari.length}/10
+                  </span>
+                </div>
+
+                {closed && !adminMode && (
+                  <div style={{
+                    padding: '10px',
+                    background: '#744210',
+                    borderRadius: '8px',
+                    textAlign: 'center',
+                    fontFamily: 'Oswald',
+                    color: '#FFD700',
+                    marginBottom: '15px'
+                  }}>
+                    ISCRIZIONI CHIUSE (19:30)
                   </div>
                 )}
 
-                {status && hoveredDate === dateId && (
-                  <div style={{
-                    position: 'absolute',
-                    top: '-60px',
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    background: status.color,
-                    color: '#fff',
-                    padding: '8px 12px',
-                    borderRadius: '6px',
-                    fontSize: '11px',
-                    fontFamily: 'Source Sans 3',
-                    fontWeight: 'bold',
-                    whiteSpace: 'nowrap',
-                    zIndex: 100,
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.4)'
-                  }}>
-                    <div>{status.status}</div>
-                    {status.details && <div style={{ fontSize: '10px', marginTop: '2px' }}>{status.details}</div>}
-                  </div>
+                {(!closed || adminMode) && (
+                  <button
+                    onClick={() => handleSignup(dayKey)}
+                    disabled={current.titolari.length >= 10 && current.riserve.length >= 3}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      background: (current.titolari.length >= 10 && current.riserve.length >= 3) ? '#555' : 'linear-gradient(135deg, #FFD700 0%, #FFA500 100%)',
+                      color: '#000',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontFamily: 'Oswald',
+                      fontSize: '16px',
+                      fontWeight: 'bold',
+                      cursor: (current.titolari.length >= 10 && current.riserve.length >= 3) ? 'not-allowed' : 'pointer',
+                      marginBottom: '15px'
+                    }}
+                  >
+                    {current.titolari.length >= 10 && current.riserve.length >= 3 ? 'LISTA PIENA' : 'MI ISCRIVO'}
+                  </button>
                 )}
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                  <div>
+                    <h4 style={{ color: '#FFD700', marginBottom: '10px', fontFamily: 'Oswald', fontSize: '14px' }}>TITOLARI</h4>
+                    {current.titolari.map((name, idx) => (
+                      <div key={idx} style={{
+                        padding: '8px',
+                        background: '#1A202C',
+                        marginBottom: '5px',
+                        borderRadius: '6px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}>
+                        <span style={{ fontFamily: 'Source Sans 3', color: '#fff', fontSize: '14px' }}>
+                          {idx + 1}. {name}
+                        </span>
+                        {(!closed || adminMode) && adminMode && (
+                          <button
+                            onClick={() => handleRemoveSignup(name, 'titolari', dateId)}
+                            style={{
+                              background: '#E53E3E',
+                              border: 'none',
+                              color: '#fff',
+                              padding: '4px 8px',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '12px'
+                            }}
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div>
+                    <h4 style={{ color: '#C0C0C0', marginBottom: '10px', fontFamily: 'Oswald', fontSize: '14px' }}>RISERVE</h4>
+                    {current.riserve.map((name, idx) => (
+                      <div key={idx} style={{
+                        padding: '8px',
+                        background: '#1A202C',
+                        marginBottom: '5px',
+                        borderRadius: '6px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}>
+                        <span style={{ fontFamily: 'Source Sans 3', color: '#fff', fontSize: '14px' }}>
+                          {idx + 1}. {name}
+                        </span>
+                        {(!closed || adminMode) && adminMode && (
+                          <button
+                            onClick={() => handleRemoveSignup(name, 'riserve', dateId)}
+                            style={{
+                              background: '#E53E3E',
+                              border: 'none',
+                              color: '#fff',
+                              padding: '4px 8px',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '12px'
+                            }}
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             );
           })}
         </div>
-
-        {selectedDate && (
-          <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0,0,0,0.85)',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            zIndex: 1000,
-            padding: '20px'
-          }}>
-            <div style={{
-              background: '#2D3748',
-              borderRadius: '12px',
-              padding: '30px',
-              width: '100%',
-              maxWidth: '600px',
-              maxHeight: '80vh',
-              overflow: 'auto'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <h3 style={{ color: '#FFD700', fontFamily: 'Oswald', fontSize: '24px' }}>
-                  {formatDate(new Date(selectedDate))}
-                </h3>
-                <button
-                  onClick={() => setSelectedDate(null)}
-                  style={{
-                    background: '#E53E3E',
-                    border: 'none',
-                    color: '#fff',
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '50%',
-                    cursor: 'pointer',
-                    fontSize: '18px',
-                    fontWeight: 'bold'
-                  }}
-                >
-                  ✕
-                </button>
-              </div>
-
-              {(() => {
-                const dateObj = new Date(selectedDate);
-                const current = signups[selectedDate] || { titolari: [], riserve: [] };
-                const closed = isMatchClosed(dateObj);
-                const past = isPastMatch(dateObj);
-                const status = getMatchStatus(dateObj);
-
-                return (
-                  <>
-                    {!past && (
-                      <>
-                        <input
-                          type="text"
-                          placeholder="Il tuo nome"
-                          value={username}
-                          onChange={(e) => {
-                            setUsername(e.target.value);
-                            localStorage.setItem('faziUsername', e.target.value);
-                          }}
-                          style={{
-                            width: '100%',
-                            padding: '12px',
-                            background: '#1A202C',
-                            border: '2px solid #4A5568',
-                            borderRadius: '8px',
-                            color: '#fff',
-                            fontFamily: 'Source Sans 3',
-                            fontSize: '16px',
-                            marginBottom: '15px'
-                          }}
-                        />
-
-                        {(!closed || adminMode) && (
-                          <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-                            <button
-                              onClick={() => handleSignup(true, selectedDate)}
-                              disabled={current.titolari.length >= 10}
-                              style={{
-                                flex: 1,
-                                padding: '15px',
-                                background: current.titolari.length >= 10 ? '#555' : 'linear-gradient(135deg, #FFD700 0%, #FFA500 100%)',
-                                color: '#000',
-                                border: 'none',
-                                borderRadius: '8px',
-                                fontFamily: 'Oswald',
-                                fontSize: '16px',
-                                fontWeight: 'bold',
-                                cursor: current.titolari.length >= 10 ? 'not-allowed' : 'pointer'
-                              }}
-                            >
-                              TITOLARE ({current.titolari.length}/10)
-                            </button>
-                            <button
-                              onClick={() => handleSignup(false, selectedDate)}
-                              disabled={current.riserve.length >= 3}
-                              style={{
-                                flex: 1,
-                                padding: '15px',
-                                background: current.riserve.length >= 3 ? '#555' : 'linear-gradient(135deg, #C0C0C0 0%, #A8A8A8 100%)',
-                                color: '#000',
-                                border: 'none',
-                                borderRadius: '8px',
-                                fontFamily: 'Oswald',
-                                fontSize: '16px',
-                                fontWeight: 'bold',
-                                cursor: current.riserve.length >= 3 ? 'not-allowed' : 'pointer'
-                              }}
-                            >
-                              RISERVA ({current.riserve.length}/3)
-                            </button>
-                          </div>
-                        )}
-
-                        {closed && !adminMode && (
-                          <div style={{
-                            padding: '15px',
-                            background: '#744210',
-                            borderRadius: '8px',
-                            textAlign: 'center',
-                            fontFamily: 'Oswald',
-                            color: '#FFD700',
-                            marginBottom: '20px'
-                          }}>
-                            ISCRIZIONI CHIUSE
-                          </div>
-                        )}
-                      </>
-                    )}
-
-                    {status && (
-                      <div style={{
-                        padding: '15px',
-                        background: status.color,
-                        borderRadius: '8px',
-                        textAlign: 'center',
-                        fontFamily: 'Oswald',
-                        color: '#fff',
-                        marginBottom: '20px',
-                        fontSize: '18px'
-                      }}>
-                        {status.status} {status.details && `• ${status.details}`}
-                      </div>
-                    )}
-
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                      <div>
-                        <h4 style={{ color: '#FFD700', marginBottom: '10px', fontFamily: 'Oswald' }}>TITOLARI</h4>
-                        {current.titolari.map((name, i) => (
-                          <div
-                            key={i}
-                            style={{
-                              padding: '10px',
-                              background: '#1A202C',
-                              marginBottom: '8px',
-                              borderRadius: '8px',
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center'
-                            }}
-                          >
-                            <span style={{ fontFamily: 'Source Sans 3', color: '#fff' }}>
-                              {i + 1}. {name}
-                            </span>
-                            {(!closed || adminMode) && adminMode && !past && (
-                              <button
-                                onClick={() => handleRemoveSignup(name, 'titolari', selectedDate)}
-                                style={{
-                                  background: '#E53E3E',
-                                  border: 'none',
-                                  color: '#fff',
-                                  padding: '5px 10px',
-                                  borderRadius: '5px',
-                                  cursor: 'pointer',
-                                  fontSize: '12px'
-                                }}
-                              >
-                                ✕
-                              </button>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-
-                      <div>
-                        <h4 style={{ color: '#C0C0C0', marginBottom: '10px', fontFamily: 'Oswald' }}>RISERVE</h4>
-                        {current.riserve.map((name, i) => (
-                          <div
-                            key={i}
-                            style={{
-                              padding: '10px',
-                              background: '#1A202C',
-                              marginBottom: '8px',
-                              borderRadius: '8px',
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center'
-                            }}
-                          >
-                            <span style={{ fontFamily: 'Source Sans 3', color: '#fff' }}>
-                              {i + 1}. {name}
-                            </span>
-                            {(!closed || adminMode) && adminMode && !past && (
-                              <button
-                                onClick={() => handleRemoveSignup(name, 'riserve', selectedDate)}
-                                style={{
-                                  background: '#E53E3E',
-                                  border: 'none',
-                                  color: '#fff',
-                                  padding: '5px 10px',
-                                  borderRadius: '5px',
-                                  cursor: 'pointer',
-                                  fontSize: '12px'
-                                }}
-                              >
-                                ✕
-                              </button>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
-          </div>
-        )}
       </div>
     );
   };
