@@ -106,6 +106,65 @@ function fbListen(path, callback) {
   });
 }
 
+// ─── JERSEY CARD (back of shirt design) ───
+function JerseyCard({ name, presenze, mvpCount, wins, losses, numero, ruolo, eta, altezza, peso, piede, onEdit, onDelete }) {
+  const t = getTier(presenze || 0);
+  const displayNum = numero || "?";
+  const displayName = (name || "GIOCATORE").toUpperCase();
+  return (
+    <div style={{ width: 170, borderRadius: 14, overflow: "hidden", border: `2px solid ${t.border}`, background: "#0d1117", flexShrink: 0, cursor: onEdit ? "pointer" : "default", position: "relative" }} onClick={onEdit}>
+      {/* Delete button (admin only) */}
+      {onDelete && <div onClick={e => { e.stopPropagation(); onDelete(); }} style={{ position: "absolute", top: 4, right: 4, zIndex: 10, width: 22, height: 22, borderRadius: "50%", background: "rgba(220,38,38,0.85)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 12, fontWeight: 700, color: "#fff", lineHeight: 1 }}>✕</div>}
+      {/* === JERSEY TOP (back of shirt) === */}
+      <div style={{ background: t.bg, position: "relative", height: 190, overflow: "hidden" }}>
+        {/* Shirt texture - subtle V lines */}
+        <div style={{ position: "absolute", inset: 0, backgroundImage: "repeating-linear-gradient(180deg, transparent, transparent 2px, rgba(255,255,255,0.03) 2px, rgba(255,255,255,0.03) 4px)", pointerEvents: "none" }} />
+        {/* Collar */}
+        <div style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", width: 50, height: 16, borderRadius: "0 0 25px 25px", background: "rgba(0,0,0,0.25)" }} />
+        {/* Shoulder seams */}
+        <div style={{ position: "absolute", top: 14, left: 0, width: "30%", height: 2, background: "rgba(0,0,0,0.12)" }} />
+        <div style={{ position: "absolute", top: 14, right: 0, width: "30%", height: 2, background: "rgba(0,0,0,0.12)" }} />
+        {/* Center back seam */}
+        <div style={{ position: "absolute", top: 16, left: "50%", width: 1, height: "100%", background: "rgba(0,0,0,0.05)" }} />
+        
+        {/* Role badge top-right */}
+        {ruolo && <div style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,0.4)", borderRadius: 6, padding: "2px 8px", fontSize: 10, fontFamily: "'Oswald',sans-serif", letterSpacing: 2, color: "#fff", zIndex: 2 }}>{ruolo}</div>}
+        
+        {/* Tier badge top-left */}
+        <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(0,0,0,0.4)", borderRadius: 6, padding: "2px 8px", fontSize: 8, fontFamily: "'Oswald',sans-serif", letterSpacing: 2, color: "rgba(255,255,255,0.7)", zIndex: 2 }}>{t.name}</div>
+        
+        {/* NAME on jersey (like printed text) */}
+        <div style={{ position: "absolute", top: 32, left: 0, right: 0, textAlign: "center", zIndex: 1 }}>
+          <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: displayName.length > 10 ? 13 : 16, fontWeight: 800, letterSpacing: 3, color: "#fff", textTransform: "uppercase", textShadow: "0 2px 4px rgba(0,0,0,0.3), 0 0 1px rgba(0,0,0,0.2)", padding: "0 8px", wordBreak: "break-word", lineHeight: 1.2 }}>{displayName}</div>
+        </div>
+        
+        {/* BIG NUMBER */}
+        <div style={{ position: "absolute", top: 58, left: 0, right: 0, textAlign: "center", zIndex: 1 }}>
+          <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 72, fontWeight: 800, color: "#fff", lineHeight: 1, textShadow: "0 3px 8px rgba(0,0,0,0.3), 2px 2px 0 rgba(0,0,0,0.1)", letterSpacing: 4 }}>{displayNum}</div>
+        </div>
+        
+        {/* Physical info at bottom of jersey */}
+        <div style={{ position: "absolute", bottom: 8, left: 0, right: 0, display: "flex", justifyContent: "center", gap: 6, zIndex: 1 }}>
+          {eta && <span style={{ fontSize: 9, color: "rgba(255,255,255,0.5)", fontFamily: "'Oswald',sans-serif", letterSpacing: 1, background: "rgba(0,0,0,0.2)", borderRadius: 4, padding: "1px 6px" }}>{eta}y</span>}
+          {altezza && <span style={{ fontSize: 9, color: "rgba(255,255,255,0.5)", fontFamily: "'Oswald',sans-serif", letterSpacing: 1, background: "rgba(0,0,0,0.2)", borderRadius: 4, padding: "1px 6px" }}>{altezza}cm</span>}
+          {peso && <span style={{ fontSize: 9, color: "rgba(255,255,255,0.5)", fontFamily: "'Oswald',sans-serif", letterSpacing: 1, background: "rgba(0,0,0,0.2)", borderRadius: 4, padding: "1px 6px" }}>{peso}kg</span>}
+          {piede && <span style={{ fontSize: 9, color: "rgba(255,255,255,0.5)", fontFamily: "'Oswald',sans-serif", letterSpacing: 1, background: "rgba(0,0,0,0.2)", borderRadius: 4, padding: "1px 6px" }}>🦶{piede[0]}</span>}
+        </div>
+      </div>
+      
+      {/* === STATS BOTTOM === */}
+      <div style={{ padding: "8px 8px 10px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
+        {[["PRE", presenze||0],["⭐", mvpCount||0],["VIT", wins||0],["SCO", losses||0]].map(([l,v],i) => (
+          <div key={i} style={{ background: "rgba(255,255,255,0.04)", borderRadius: 6, padding: "4px 0", textAlign: "center" }}>
+            <span style={{ fontFamily: "'Oswald',sans-serif", fontSize: 16, fontWeight: 700, color: "#e2e8f0", display: "block" }}>{v}</span>
+            <span style={{ fontSize: 8, fontFamily: "'Oswald',sans-serif", letterSpacing: 1.5, color: "#64748b" }}>{l}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── MAIN APP ───
 export default function App() {
   const [tab, setTab] = useState("signup");
