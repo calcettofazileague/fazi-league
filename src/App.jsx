@@ -771,120 +771,193 @@ export default function App() {
         </div>
       )}
 
-      {/* ═══ TAB: CARRIERE ═══ */}
-      {tab === "careers" && (
-        <div style={S.content}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-            <h2 style={{ fontFamily: "'Oswald', sans-serif", fontSize: 28, letterSpacing: 3, color: "#eab308", margin: 0 }}>CARRIERE</h2>
-            <button onClick={() => setShowProfileModal(true)} style={{ ...S.actionBtn, ...S.actionPrimary }}>+ CREA PROFILO</button>
-          </div>
+{/* ═══ TAB: CARRIERE ═══ */}
+{tab === "careers" && (
+  <div style={S.content}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+      <h2 style={{ fontFamily: "'Oswald', sans-serif", fontSize: 28, letterSpacing: 3, color: "#eab308", margin: 0 }}>CARRIERE</h2>
+      <button onClick={() => setShowProfileModal(true)} style={{ ...S.actionBtn, ...S.actionPrimary }}>+ CREA PROFILO</button>
+    </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 20 }}>
-            {Object.entries(players)
-              .map(([nickname, data]) => ({
-                nickname,
-                ...data,
-                presences: playerStats[nickname.toLowerCase()]?.gamesPlayed || 0,
-                wins: playerStats[nickname.toLowerCase()]?.wins || 0,
-                mvps: playerStats[nickname.toLowerCase()]?.mvpCount || 0
-              }))
-              .sort((a, b) => b.presences - a.presences)
-              .map(p => {
-                const tier = getTierInfo(p.presences);
-                return (
-                  <div 
-                    key={p.nickname} 
-                    style={{ background: tier.gradient, borderRadius: 16, padding: 24, textAlign: 'center', position: 'relative', boxShadow: '0 8px 24px rgba(0,0,0,0.4)', cursor: adminMode ? 'pointer' : 'default' }}
-                    onClick={() => adminMode && startEditingPlayerStats(p)}
-                  >
-                    {adminMode && (
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); handleDeletePlayer(p.nickname); }} 
-                        style={{ position: 'absolute', top: 10, right: 10, background: '#dc2626', border: 'none', color: '#fff', width: 28, height: 28, borderRadius: '50%', cursor: 'pointer', fontSize: 16, fontWeight: 'bold', zIndex: 10 }}
-                      >✕</button>
-                    )}
-                    <div style={{ fontSize: 64, fontFamily: "'Oswald', sans-serif", fontWeight: 700, color: '#000', marginBottom: 8, lineHeight: 1 }}>{p.numero}</div>
-                    <div style={{ fontSize: 24, fontFamily: "'Oswald', sans-serif", fontWeight: 700, color: '#000', marginBottom: 12, letterSpacing: 1 }}>{p.nickname}</div>
-                    <div style={{ fontSize: 12, color: '#000', marginBottom: 16, fontFamily: "'Source Sans 3', sans-serif", fontWeight: 600, opacity: 0.8 }}>{p.ruolo} • {tier.name}</div>
-                    <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 10, padding: 12, fontSize: 13, color: '#000', fontFamily: "'Source Sans 3', sans-serif", fontWeight: 600 }}>
-                      <div style={{ marginBottom: 4 }}><strong>{p.presences}</strong> presenze</div>
-                      <div style={{ marginBottom: 4 }}><strong>{p.wins}</strong> vittorie</div>
-                      <div style={{ marginBottom: 4 }}><strong>{p.mvps}</strong> MVP</div>
-                      <div style={{ marginTop: 8, fontSize: 11, opacity: 0.8 }}>{p.eta}y • {p.altezza}cm • {p.peso}kg • {p.piede}</div>
-                    </div>
-                    {adminMode && (
-                      <div style={{ marginTop: 8, fontSize: 11, color: '#000', opacity: 0.6, fontFamily: "'Oswald', sans-serif" }}>
-                        Click per modificare stats
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-          </div>
-
-          {/* MODAL CREA PROFILO */}
-          {showProfileModal && (
-            <div style={S.overlay}>
-              <div style={S.modal}>
-                <h3 style={S.modalTitle}>Crea Profilo Giocatore</h3>
-                <input type="text" placeholder="Nickname" value={profileForm.nickname} onChange={(e) => setProfileForm({...profileForm, nickname: e.target.value})} style={{ ...S.input, marginBottom: 12, textAlign: 'left' }} />
-                <input type="number" placeholder="Numero Maglia" value={profileForm.numero} onChange={(e) => setProfileForm({...profileForm, numero: e.target.value})} style={{ ...S.input, marginBottom: 12, textAlign: 'left' }} />
-                <select value={profileForm.ruolo} onChange={(e) => setProfileForm({...profileForm, ruolo: e.target.value})} style={{ ...S.input, marginBottom: 12, textAlign: 'left' }}>
-                  <option>ATT</option>
-                  <option>CEN</option>
-                  <option>DIF</option>
-                  <option>POR</option>
-                </select>
-                <input type="number" placeholder="Età" value={profileForm.eta} onChange={(e) => setProfileForm({...profileForm, eta: e.target.value})} style={{ ...S.input, marginBottom: 12, textAlign: 'left' }} />
-                <input type="number" placeholder="Altezza (cm)" value={profileForm.altezza} onChange={(e) => setProfileForm({...profileForm, altezza: e.target.value})} style={{ ...S.input, marginBottom: 12, textAlign: 'left' }} />
-                <input type="number" placeholder="Peso (kg)" value={profileForm.peso} onChange={(e) => setProfileForm({...profileForm, peso: e.target.value})} style={{ ...S.input, marginBottom: 12, textAlign: 'left' }} />
-                <select value={profileForm.piede} onChange={(e) => setProfileForm({...profileForm, piede: e.target.value})} style={{ ...S.input, marginBottom: 20, textAlign: 'left' }}>
-                  <option>Destro</option>
-                  <option>Sinistro</option>
-                  <option>Ambidestro</option>
-                </select>
-                <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
-                  <button style={S.cancelBtn} onClick={() => { setShowProfileModal(false); setProfileForm({ nickname: '', numero: '', ruolo: 'ATT', eta: '', altezza: '', peso: '', piede: 'Destro' }); }}>ANNULLA</button>
-                  <button style={S.saveBtn} onClick={handleSaveProfile}>💾 SALVA</button>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 20 }}>
+      {Object.entries(players)
+        .map(([nickname, data]) => {
+          // MATCHING ROBUSTO: cerca stats con case-insensitive
+          const statsKey = Object.keys(playerStats).find(k => k.toLowerCase() === nickname.toLowerCase());
+          const stats = statsKey ? playerStats[statsKey] : null;
+          
+          return {
+            nickname,
+            ...data,
+            presences: stats?.gamesPlayed || 0,
+            wins: stats?.wins || 0,
+            draws: stats?.draws || 0,
+            losses: stats?.losses || 0,
+            mvps: stats?.mvpCount || 0
+          };
+        })
+        .sort((a, b) => b.presences - a.presences)
+        .map(p => {
+          const tier = getTierInfo(p.presences);
+          return (
+            <div 
+              key={p.nickname} 
+              style={{ 
+                backgroundImage: tier.gradient,  // ← FIX: usa backgroundImage
+                borderRadius: 16, 
+                padding: 24, 
+                textAlign: 'center', 
+                position: 'relative', 
+                boxShadow: '0 8px 24px rgba(0,0,0,0.4)', 
+                cursor: adminMode ? 'pointer' : 'default' 
+              }}
+              onClick={() => adminMode && startEditingPlayerStats(p)}
+            >
+              {adminMode && (
+                <button 
+                  onClick={(e) => { e.stopPropagation(); handleDeletePlayer(p.nickname); }} 
+                  style={{ 
+                    position: 'absolute', 
+                    top: 10, 
+                    right: 10, 
+                    background: '#dc2626', 
+                    border: 'none', 
+                    color: '#fff', 
+                    width: 28, 
+                    height: 28, 
+                    borderRadius: '50%', 
+                    cursor: 'pointer', 
+                    fontSize: 16, 
+                    fontWeight: 'bold', 
+                    zIndex: 10 
+                  }}
+                >✕</button>
+              )}
+              <div style={{ 
+                fontSize: 64, 
+                fontFamily: "'Oswald', sans-serif", 
+                fontWeight: 700, 
+                color: '#000', 
+                marginBottom: 8, 
+                lineHeight: 1 
+              }}>
+                {p.numero}
+              </div>
+              <div style={{ 
+                fontSize: 24, 
+                fontFamily: "'Oswald', sans-serif", 
+                fontWeight: 700, 
+                color: '#000', 
+                marginBottom: 12, 
+                letterSpacing: 1 
+              }}>
+                {p.nickname}
+              </div>
+              <div style={{ 
+                fontSize: 12, 
+                color: '#000', 
+                marginBottom: 16, 
+                fontFamily: "'Source Sans 3', sans-serif", 
+                fontWeight: 600, 
+                opacity: 0.8 
+              }}>
+                {p.ruolo} • {tier.name}
+              </div>
+              <div style={{ 
+                background: 'rgba(0,0,0,0.2)', 
+                borderRadius: 10, 
+                padding: 12, 
+                fontSize: 13, 
+                color: '#000', 
+                fontFamily: "'Source Sans 3', sans-serif", 
+                fontWeight: 600 
+              }}>
+                <div style={{ marginBottom: 4 }}><strong>{p.presences}</strong> presenze</div>
+                <div style={{ marginBottom: 4 }}><strong>{p.wins}</strong> vittorie</div>
+                <div style={{ marginBottom: 4 }}><strong>{p.mvps}</strong> MVP</div>
+                <div style={{ marginTop: 8, fontSize: 11, opacity: 0.8 }}>
+                  {p.eta}y • {p.altezza}cm • {p.peso}kg • {p.piede}
                 </div>
               </div>
+              {adminMode && (
+                <div style={{ 
+                  marginTop: 8, 
+                  fontSize: 11, 
+                  color: '#000', 
+                  opacity: 0.6, 
+                  fontFamily: "'Oswald', sans-serif" 
+                }}>
+                  Click per modificare stats
+                </div>
+              )}
             </div>
-          )}
+          );
+        })}
+    </div>
 
-          {/* MODAL EDIT PLAYER STATS */}
-          {editingPlayer && (
-            <div style={S.overlay}>
-              <div style={S.modal}>
-                <h3 style={S.modalTitle}>Modifica Statistiche — {editingPlayer.nickname}</h3>
-                <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4, fontFamily: "'Oswald', sans-serif" }}>PRESENZE</label>
-                  <input type="number" value={editingPlayer.gamesPlayed} onChange={(e) => setEditingPlayer({...editingPlayer, gamesPlayed: e.target.value})} style={{ ...S.input, textAlign: 'left' }} />
-                </div>
-                <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4, fontFamily: "'Oswald', sans-serif" }}>VITTORIE</label>
-                  <input type="number" value={editingPlayer.wins} onChange={(e) => setEditingPlayer({...editingPlayer, wins: e.target.value})} style={{ ...S.input, textAlign: 'left' }} />
-                </div>
-                <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4, fontFamily: "'Oswald', sans-serif" }}>PAREGGI</label>
-                  <input type="number" value={editingPlayer.draws} onChange={(e) => setEditingPlayer({...editingPlayer, draws: e.target.value})} style={{ ...S.input, textAlign: 'left' }} />
-                </div>
-                <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4, fontFamily: "'Oswald', sans-serif" }}>SCONFITTE</label>
-                  <input type="number" value={editingPlayer.losses} onChange={(e) => setEditingPlayer({...editingPlayer, losses: e.target.value})} style={{ ...S.input, textAlign: 'left' }} />
-                </div>
-                <div style={{ marginBottom: 20 }}>
-                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4, fontFamily: "'Oswald', sans-serif" }}>MVP</label>
-                  <input type="number" value={editingPlayer.mvpCount} onChange={(e) => setEditingPlayer({...editingPlayer, mvpCount: e.target.value})} style={{ ...S.input, textAlign: 'left' }} />
-                </div>
-                <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
-                  <button style={S.cancelBtn} onClick={() => setEditingPlayer(null)}>ANNULLA</button>
-                  <button style={S.saveBtn} onClick={saveEditedPlayerStats}>💾 SALVA</button>
-                </div>
-              </div>
-            </div>
-          )}
+    {/* MODAL CREA PROFILO */}
+    {showProfileModal && (
+      <div style={S.overlay}>
+        <div style={S.modal}>
+          <h3 style={S.modalTitle}>Crea Profilo Giocatore</h3>
+          <input type="text" placeholder="Nickname" value={profileForm.nickname} onChange={(e) => setProfileForm({...profileForm, nickname: e.target.value})} style={{ ...S.input, marginBottom: 12, textAlign: 'left' }} />
+          <input type="number" placeholder="Numero Maglia" value={profileForm.numero} onChange={(e) => setProfileForm({...profileForm, numero: e.target.value})} style={{ ...S.input, marginBottom: 12, textAlign: 'left' }} />
+          <select value={profileForm.ruolo} onChange={(e) => setProfileForm({...profileForm, ruolo: e.target.value})} style={{ ...S.input, marginBottom: 12, textAlign: 'left' }}>
+            <option>ATT</option>
+            <option>CEN</option>
+            <option>DIF</option>
+            <option>POR</option>
+          </select>
+          <input type="number" placeholder="Età" value={profileForm.eta} onChange={(e) => setProfileForm({...profileForm, eta: e.target.value})} style={{ ...S.input, marginBottom: 12, textAlign: 'left' }} />
+          <input type="number" placeholder="Altezza (cm)" value={profileForm.altezza} onChange={(e) => setProfileForm({...profileForm, altezza: e.target.value})} style={{ ...S.input, marginBottom: 12, textAlign: 'left' }} />
+          <input type="number" placeholder="Peso (kg)" value={profileForm.peso} onChange={(e) => setProfileForm({...profileForm, peso: e.target.value})} style={{ ...S.input, marginBottom: 12, textAlign: 'left' }} />
+          <select value={profileForm.piede} onChange={(e) => setProfileForm({...profileForm, piede: e.target.value})} style={{ ...S.input, marginBottom: 20, textAlign: 'left' }}>
+            <option>Destro</option>
+            <option>Sinistro</option>
+            <option>Ambidestro</option>
+          </select>
+          <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+            <button style={S.cancelBtn} onClick={() => { setShowProfileModal(false); setProfileForm({ nickname: '', numero: '', ruolo: 'ATT', eta: '', altezza: '', peso: '', piede: 'Destro' }); }}>ANNULLA</button>
+            <button style={S.saveBtn} onClick={handleSaveProfile}>💾 SALVA</button>
+          </div>
         </div>
-      )}
+      </div>
+    )}
+
+    {/* MODAL EDIT PLAYER STATS */}
+    {editingPlayer && (
+      <div style={S.overlay}>
+        <div style={S.modal}>
+          <h3 style={S.modalTitle}>Modifica Statistiche — {editingPlayer.nickname}</h3>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4, fontFamily: "'Oswald', sans-serif" }}>PRESENZE</label>
+            <input type="number" value={editingPlayer.gamesPlayed} onChange={(e) => setEditingPlayer({...editingPlayer, gamesPlayed: e.target.value})} style={{ ...S.input, textAlign: 'left' }} />
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4, fontFamily: "'Oswald', sans-serif" }}>VITTORIE</label>
+            <input type="number" value={editingPlayer.wins} onChange={(e) => setEditingPlayer({...editingPlayer, wins: e.target.value})} style={{ ...S.input, textAlign: 'left' }} />
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4, fontFamily: "'Oswald', sans-serif" }}>PAREGGI</label>
+            <input type="number" value={editingPlayer.draws} onChange={(e) => setEditingPlayer({...editingPlayer, draws: e.target.value})} style={{ ...S.input, textAlign: 'left' }} />
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4, fontFamily: "'Oswald', sans-serif" }}>SCONFITTE</label>
+            <input type="number" value={editingPlayer.losses} onChange={(e) => setEditingPlayer({...editingPlayer, losses: e.target.value})} style={{ ...S.input, textAlign: 'left' }} />
+          </div>
+          <div style={{ marginBottom: 20 }}>
+            <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4, fontFamily: "'Oswald', sans-serif" }}>MVP</label>
+            <input type="number" value={editingPlayer.mvpCount} onChange={(e) => setEditingPlayer({...editingPlayer, mvpCount: e.target.value})} style={{ ...S.input, textAlign: 'left' }} />
+          </div>
+          <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+            <button style={S.cancelBtn} onClick={() => setEditingPlayer(null)}>ANNULLA</button>
+            <button style={S.saveBtn} onClick={saveEditedPlayerStats}>💾 SALVA</button>
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
+)}
 
       {/* ═══ TAB: STATISTICHE ═══ */}
       {tab === "stats" && (
