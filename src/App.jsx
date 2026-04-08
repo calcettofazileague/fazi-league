@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { db } from "./firebase.js";
-import { ref, set, onValue } from "firebase/database";
+import { ref, set, onValue, push, get, remove } from "firebase/database";
 
 // ─── CONFIG ───
 const MATCH_DAYS = [
@@ -16,23 +16,19 @@ const MAX_TOTAL = MAX_PLAYERS + MAX_RESERVES;
 const TEAM_SIZE = 5;
 const MATCH_HOUR = 19;
 const MATCH_MINUTE = 30;
-const LOCK_HOURS_BEFORE = 0; // MODIFICATO: era 6, ora chiude alle 19:30
+const LOCK_HOURS_BEFORE = 0;
 
 // Get the Monday that defines the active match week
-// Mon-Fri: show THIS week's matches
-// Sat-Sun: show NEXT week's matches (so people can sign up in advance)
 const getActiveMonday = () => {
   const now = new Date();
-  const currentDay = now.getDay(); // 0=Sun, 1=Mon...
+  const currentDay = now.getDay();
 
   const monday = new Date(now);
   monday.setHours(0, 0, 0, 0);
 
   if (currentDay >= 1 && currentDay <= 5) {
-    // Mon-Fri: go back to this week's Monday
     monday.setDate(now.getDate() - (currentDay - 1));
   } else {
-    // Sat(6) or Sun(0): jump forward to next Monday
     const daysUntilMonday = currentDay === 0 ? 1 : 2;
     monday.setDate(now.getDate() + daysUntilMonday);
   }
@@ -46,7 +42,6 @@ const getWeekId = () => {
   return `${monday.getFullYear()}-W${Math.floor(diff / 604800000)}`;
 };
 
-// Get dates for active week's matches
 const getWeekDates = () => {
   const monday = getActiveMonday();
   const dates = {};
@@ -68,24 +63,25 @@ const isLocked = (dayKey) => {
   const matchDate = dates[dayKey];
   if (!matchDate) return false;
   const lockTime = new Date(matchDate);
-  lockTime.setHours(MATCH_HOUR, MATCH_MINUTE, 0, 0); // MODIFICATO: chiude alle 19:30
+  lockTime.setHours(MATCH_HOUR, MATCH_MINUTE, 0, 0);
   return new Date() >= lockTime;
 };
 
-const getLockTimeStr = (dayKey) => {
-  return `${MATCH_HOUR}:${String(MATCH_MINUTE).padStart(2, "0")}`; // MODIFICATO: mostra 19:30
+const getTierInfo = (presences) => {
+  if (presences >= 100) return { name: 'LEGGENDA', color: '#FFD700', gradient: 'linear-gradient(135deg, #FFD700 0%, #FFA500 100%)' };
+  if (presences >= 50) return { name: 'ELITE', color: '#C0C0C0', gradient: 'linear-gradient(135deg, #E8E8E8 0%, #A8A8A8 100%)' };
+  if (presences >= 10) return { name: 'VETERANO', color: '#CD7F32', gradient: 'linear-gradient(135deg, #CD7F32 0%, #8B4513 100%)' };
+  return { name: 'ROOKIE', color: '#4A5568', gradient: 'linear-gradient(135deg, #718096 0%, #4A5568 100%)' };
 };
 
-// ─── BALANCED TEAM ALGORITHM (based on presences) ───
+// ─── BALANCED TEAM ALGORITHM ───
 function balanceTeams(players, playerStats) {
   const scored = players.map((name) => {
     const s = playerStats[name.toLowerCase()] || { gamesPlayed: 0 };
     return { name, presenze: s.gamesPlayed || 0 };
   });
-  // Sort by presences: veterans first
   scored.sort((a, b) => b.presenze - a.presenze);
 
-  // Distribute alternating: most experienced get split between teams
   const teamA = [];
   const teamB = [];
   let sumA = 0, sumB = 0;
@@ -118,6 +114,7 @@ export default function App() {
   const [playerStats, setPlayerStats] = useState({});
   const [matchHistory, setMatchHistory] = useState([]);
   const [generatedTeams, setGeneratedTeams] = useState({});
+  const [players, setPlayers] = useState({});
   const [loading, setLoading] = useState(true);
   const [weekId] = useState(getWeekId());
   const [toast, setToast] = useState(null);
@@ -125,8 +122,14 @@ export default function App() {
   const [adminClicks, setAdminClicks] = useState(0);
   const [selectedDay, setSelectedDay] = useState(null);
   const [matchForm, setMatchForm] = useState(null);
-  const [editingTeams, setEditingTeams] = useState(false); // AGGIUNTO per modifica squadre
-  const [editedTeams, setEditedTeams] = useState(null); // AGGIUNTO per modifica squadre
+  const [editingTeams, setEditingTeams] = useState(false);
+  const [editedTeams, setEditedTeams] = useState(null);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    nickname: '', numero: '', ruolo: 'ATT', eta: '', altezza: '', peso: '', piede: 'Destro'
+  });
+
+  const teamsGenerated = useRef({});
 
   const showToast = (msg, type = "success") => {
     setToast({ msg, type });
@@ -150,17 +153,20 @@ export default function App() {
     const unsub4 = fbListen(`teams/${weekId}`, (data) => {
       setGeneratedTeams(data || {});
     });
+    const unsub5 = fbListen("players", (data) => {
+      setPlayers(data || {});
+    });
 
     setLoading(false);
 
-    return () => { unsub1(); unsub2(); unsub3(); unsub4(); };
+    return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); };
   }, [weekId]);
 
   // ─── SIGNUP HANDLERS ───
   const handleSignup = async (dayKey) => {
     const name = playerName.trim();
     if (!name) return showToast("Scrivi il tuo nome!", "error");
-    if (isLocked(dayKey) && !adminMode) return showToast("Lista chiusa!", "error"); // MODIFICATO: admin bypassa
+    if (isLocked(dayKey) && !adminMode) return showToast("Lista chiusa!", "error");
     const cur = signups[dayKey] || [];
     if (cur.some(n => n.toLowerCase() === name.toLowerCase())) return showToast("Già iscritto!", "error");
     if (cur.length >= MAX_TOTAL) return showToast("Lista piena (anche le riserve)!", "error");
@@ -177,7 +183,7 @@ export default function App() {
   };
 
   const handleRemove = async (dayKey, name) => {
-    if (isLocked(dayKey) && !adminMode) return showToast("Lista chiusa!", "error"); // MODIFICATO: admin bypassa
+    if (isLocked(dayKey) && !adminMode) return showToast("Lista chiusa!", "error");
     const updated = { ...signups, [dayKey]: (signups[dayKey] || []).filter(n => n !== name) };
     setSignups(updated);
     await fbWrite(`signups/${weekId}`, updated);
@@ -186,21 +192,24 @@ export default function App() {
 
   // ─── TEAM GENERATION ───
   const generateTeams = async (dayKey) => {
+    if (teamsGenerated.current[dayKey]) return;
+    
     const allPlayers = signups[dayKey] || [];
-    const players = allPlayers.slice(0, MAX_PLAYERS); // Only titolari
-    if (players.length < 2) return showToast("Servono almeno 2 giocatori!", "error");
-    const result = balanceTeams(players, playerStats);
+    const playersToUse = allPlayers.slice(0, MAX_PLAYERS);
+    if (playersToUse.length < 2) return showToast("Servono almeno 2 giocatori!", "error");
+    const result = balanceTeams(playersToUse, playerStats);
     const updated = { ...generatedTeams, [dayKey]: result };
     setGeneratedTeams(updated);
     await fbWrite(`teams/${weekId}`, updated);
     setSelectedDay(dayKey);
+    teamsGenerated.current[dayKey] = true;
     showToast("Squadre generate!");
   };
 
   const shuffleTeams = async (dayKey) => {
     const allPlayers = signups[dayKey] || [];
-    const players = allPlayers.slice(0, MAX_PLAYERS);
-    const shuffled = [...players].sort(() => Math.random() - 0.5);
+    const playersToUse = allPlayers.slice(0, MAX_PLAYERS);
+    const shuffled = [...playersToUse].sort(() => Math.random() - 0.5);
     const result = balanceTeams(shuffled, playerStats);
     const updated = { ...generatedTeams, [dayKey]: result };
     setGeneratedTeams(updated);
@@ -208,7 +217,6 @@ export default function App() {
     showToast("Squadre rimescolate!");
   };
 
-  // AGGIUNTO: Modifica squadre drag-and-drop
   const startEditingTeams = (dayKey) => {
     const teams = generatedTeams[dayKey];
     if (!teams) return showToast("Genera prima le squadre!", "error");
@@ -245,7 +253,6 @@ export default function App() {
     newTeams[fromTeam] = newTeams[fromTeam].filter(p => p.name !== playerName);
     newTeams[toTeam] = [...newTeams[toTeam], playerObj];
     
-    // Ricalcola somme
     newTeams.sumA = newTeams.teamA.reduce((sum, p) => sum + p.presenze, 0);
     newTeams.sumB = newTeams.teamB.reduce((sum, p) => sum + p.presenze, 0);
     
@@ -254,14 +261,14 @@ export default function App() {
 
   // ─── MATCH RESULT RECORDING ───
   const startMatchForm = (dayKey) => {
-    const teams = generatedTeams[dayKey];
+    const teams = editingTeams ? editedTeams : generatedTeams[dayKey];
     if (!teams) return;
     const allPlayers = [...teams.teamA, ...teams.teamB];
     const pf = {};
     allPlayers.forEach(p => {
       pf[p.name] = { present: true, team: teams.teamA.some(t => t.name === p.name) ? "A" : "B" };
     });
-    setMatchForm({ dayKey, players: pf, scoreA: 0, scoreB: 0 });
+    setMatchForm({ dayKey, players: pf, scoreA: 0, scoreB: 0, mvp: '' });
   };
 
   const togglePresence = (name) => {
@@ -273,19 +280,23 @@ export default function App() {
 
   const saveMatchResult = async () => {
     if (!matchForm) return;
-    const { dayKey, players, scoreA, scoreB } = matchForm;
+    const { dayKey, players, scoreA, scoreB, mvp } = matchForm;
+    
+    if (!mvp || !players[mvp]) return showToast("Seleziona un MVP!", "error");
+    
     const winner = scoreA > scoreB ? "A" : scoreB > scoreA ? "B" : "draw";
 
     const newStats = { ...playerStats };
     Object.entries(players).forEach(([name, data]) => {
-      if (!data.present) return; // Skip absent players
+      if (!data.present) return;
       const key = name.toLowerCase();
-      const prev = newStats[key] || { name, gamesPlayed: 0, wins: 0, draws: 0, losses: 0 };
+      const prev = newStats[key] || { name, gamesPlayed: 0, wins: 0, draws: 0, losses: 0, mvpCount: 0 };
       prev.name = name;
       prev.gamesPlayed += 1;
       if (winner === "draw") prev.draws = (prev.draws || 0) + 1;
       else if (data.team === winner) prev.wins = (prev.wins || 0) + 1;
       else prev.losses = (prev.losses || 0) + 1;
+      if (name === mvp) prev.mvpCount = (prev.mvpCount || 0) + 1;
       newStats[key] = prev;
     });
 
@@ -299,6 +310,7 @@ export default function App() {
       scoreA,
       scoreB,
       winner,
+      mvp,
       players: presentPlayers,
     };
 
@@ -307,7 +319,35 @@ export default function App() {
     await fbWrite("playerStats", newStats);
     await fbWrite(`matchHistory/${matchId}`, match);
     setMatchForm(null);
+    setEditingTeams(false);
+    setEditedTeams(null);
     showToast("Partita registrata! Presenze aggiornate.");
+  };
+
+  // ─── PLAYER PROFILES ───
+  const handleSaveProfile = async () => {
+    const { nickname, numero, ruolo, eta, altezza, peso, piede } = profileForm;
+    if (!nickname || !numero) return showToast("Compila nome e numero!", "error");
+    
+    await fbWrite(`players/${nickname}`, {
+      nickname,
+      numero: parseInt(numero),
+      ruolo,
+      eta: parseInt(eta) || 0,
+      altezza: parseInt(altezza) || 0,
+      peso: parseInt(peso) || 0,
+      piede
+    });
+    
+    setShowProfileModal(false);
+    setProfileForm({ nickname: '', numero: '', ruolo: 'ATT', eta: '', altezza: '', peso: '', piede: 'Destro' });
+    showToast("Profilo salvato!");
+  };
+
+  const handleDeletePlayer = async (nickname) => {
+    if (!window.confirm(`Eliminare ${nickname}?`)) return;
+    await remove(ref(db, `players/${nickname}`));
+    showToast("Profilo eliminato!");
   };
 
   // ─── ADMIN ───
@@ -323,6 +363,7 @@ export default function App() {
     MATCH_DAYS.forEach(d => (empty[d.key] = []));
     setSignups(empty);
     setGeneratedTeams({});
+    teamsGenerated.current = {};
     await fbWrite(`signups/${weekId}`, empty);
     await fbWrite(`teams/${weekId}`, {});
     showToast("Liste azzerate!");
@@ -404,6 +445,7 @@ export default function App() {
         {[
           { id: "signup", label: "ISCRIZIONI", icon: "📋" },
           { id: "teams", label: "SQUADRE", icon: "⚔️" },
+          { id: "careers", label: "CARRIERE", icon: "🎖️" },
           { id: "stats", label: "PRESENZE", icon: "🏃" },
           { id: "history", label: "STORICO", icon: "🏆" },
         ].map(t => (
@@ -431,12 +473,11 @@ export default function App() {
 
           <div style={S.daysGrid}>
             {MATCH_DAYS.map(day => {
-              const players = signups[day.key] || [];
-              const titolari = players.slice(0, MAX_PLAYERS);
-              const riserve = players.slice(MAX_PLAYERS, MAX_TOTAL);
+              const playersArr = signups[day.key] || [];
+              const titolari = playersArr.slice(0, MAX_PLAYERS);
+              const riserve = playersArr.slice(MAX_PLAYERS, MAX_TOTAL);
               const locked = isLocked(day.key);
-              const isFull = players.length >= MAX_TOTAL;
-              const spotsLeft = MAX_TOTAL - players.length;
+              const isFull = playersArr.length >= MAX_TOTAL;
               const weekDates = getWeekDates();
               const dateStr = formatDate(weekDates[day.key]);
 
@@ -482,12 +523,12 @@ export default function App() {
                           <span style={S.removeX}>✕</span>}
                       </div>
                     ))}
-                    {players.length === 0 && <p style={S.emptyMsg}>Nessun iscritto</p>}
+                    {playersArr.length === 0 && <p style={S.emptyMsg}>Nessun iscritto</p>}
                   </div>
 
                   <button onClick={() => handleSignup(day.key)} disabled={isFull || (locked && !adminMode)}
                     style={{ ...S.signBtn, ...(isFull || (locked && !adminMode) ? S.signBtnFull : {}), ...((locked && !adminMode) ? { background: "rgba(220,38,38,0.1)", color: "#f87171" } : {}) }}>
-                    {(locked && !adminMode) ? "🔒 CHIUSA" : isFull ? "COMPLETO ✓" : titolari.length >= MAX_PLAYERS ? `RISERVA (${MAX_TOTAL - players.length} posti)` : `MI ISCRIVO (${MAX_PLAYERS - titolari.length} posti)`}
+                    {(locked && !adminMode) ? "🔒 CHIUSA" : isFull ? "COMPLETO ✓" : titolari.length >= MAX_PLAYERS ? `RISERVA (${MAX_TOTAL - playersArr.length} posti)` : `MI ISCRIVO (${MAX_PLAYERS - titolari.length} posti)`}
                   </button>
                 </div>
               );
@@ -505,7 +546,7 @@ export default function App() {
       {/* ═══ TAB: SQUADRE ═══ */}
       {tab === "teams" && (
         <div style={S.content}>
-          <p style={S.sectionDesc}>Seleziona un giorno per generare squadre bilanciate in base alle statistiche.</p>
+          <p style={S.sectionDesc}>Seleziona un giorno per generare squadre bilanciate.</p>
           <div style={S.dayBtns}>
             {MATCH_DAYS.map(day => {
               const allPlayers = signups[day.key] || [];
@@ -622,6 +663,21 @@ export default function App() {
                     </div>
                   </div>
                 </div>
+
+                <div style={{ marginBottom: 20 }}>
+                  <label style={{ display: 'block', fontFamily: "'Oswald', sans-serif", fontSize: 14, letterSpacing: 1.5, color: "#eab308", marginBottom: 8 }}>⭐ MVP DELLA PARTITA</label>
+                  <select 
+                    value={matchForm.mvp} 
+                    onChange={(e) => setMatchForm(p => ({ ...p, mvp: e.target.value }))}
+                    style={{ width: '100%', padding: '12px', background: '#1a202c', border: '2px solid #eab308', borderRadius: 10, color: '#e2e8f0', fontFamily: "'Oswald', sans-serif", fontSize: 15, cursor: 'pointer' }}
+                  >
+                    <option value="">-- Seleziona MVP --</option>
+                    {Object.entries(matchForm.players).filter(([_, d]) => d.present).map(([name]) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </div>
+
                 <div style={{ marginBottom: 20 }}>
                   <div style={S.formHeader}>
                     <span style={{ flex: 2 }}>Giocatore</span>
@@ -638,8 +694,77 @@ export default function App() {
                   ))}
                 </div>
                 <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
-                  <button style={S.cancelBtn} onClick={() => setMatchForm(null)}>ANNULLA</button>
+                  <button style={S.cancelBtn} onClick={() => { setMatchForm(null); setEditingTeams(false); setEditedTeams(null); }}>ANNULLA</button>
                   <button style={S.saveBtn} onClick={saveMatchResult}>💾 SALVA PARTITA</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ═══ TAB: CARRIERE ═══ */}
+      {tab === "careers" && (
+        <div style={S.content}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+            <h2 style={{ fontFamily: "'Oswald', sans-serif", fontSize: 28, letterSpacing: 3, color: "#eab308", margin: 0 }}>CARRIERE</h2>
+            <button onClick={() => setShowProfileModal(true)} style={{ ...S.actionBtn, ...S.actionPrimary }}>+ CREA PROFILO</button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 20 }}>
+            {Object.entries(players)
+              .map(([nickname, data]) => ({
+                nickname,
+                ...data,
+                presences: playerStats[nickname.toLowerCase()]?.gamesPlayed || 0,
+                wins: playerStats[nickname.toLowerCase()]?.wins || 0,
+                mvps: playerStats[nickname.toLowerCase()]?.mvpCount || 0
+              }))
+              .sort((a, b) => b.presences - a.presences)
+              .map(p => {
+                const tier = getTierInfo(p.presences);
+                return (
+                  <div key={p.nickname} style={{ background: tier.gradient, borderRadius: 16, padding: 24, textAlign: 'center', position: 'relative', boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
+                    {adminMode && (
+                      <button onClick={() => handleDeletePlayer(p.nickname)} style={{ position: 'absolute', top: 10, right: 10, background: '#dc2626', border: 'none', color: '#fff', width: 28, height: 28, borderRadius: '50%', cursor: 'pointer', fontSize: 16, fontWeight: 'bold' }}>✕</button>
+                    )}
+                    <div style={{ fontSize: 56, fontFamily: "'Oswald', sans-serif", fontWeight: 700, color: '#000', marginBottom: 8 }}>{p.numero}</div>
+                    <div style={{ fontSize: 22, fontFamily: "'Oswald', sans-serif", fontWeight: 700, color: '#000', marginBottom: 12, letterSpacing: 1 }}>{p.nickname}</div>
+                    <div style={{ fontSize: 12, color: '#000', marginBottom: 16, fontFamily: "'Source Sans 3', sans-serif", fontWeight: 600 }}>{p.ruolo} • {tier.name}</div>
+                    <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 10, padding: 12, fontSize: 13, color: '#000', fontFamily: "'Source Sans 3', sans-serif" }}>
+                      <div><strong>{p.presences}</strong> presenze</div>
+                      <div><strong>{p.wins}</strong> vittorie</div>
+                      <div><strong>{p.mvps}</strong> MVP</div>
+                      <div style={{ marginTop: 6, fontSize: 11 }}>{p.eta}y • {p.altezza}cm • {p.peso}kg • {p.piede}</div>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+
+          {showProfileModal && (
+            <div style={S.overlay}>
+              <div style={S.modal}>
+                <h3 style={S.modalTitle}>Crea Profilo Giocatore</h3>
+                <input type="text" placeholder="Nickname" value={profileForm.nickname} onChange={(e) => setProfileForm({...profileForm, nickname: e.target.value})} style={{ ...S.input, marginBottom: 12, textAlign: 'left' }} />
+                <input type="number" placeholder="Numero Maglia" value={profileForm.numero} onChange={(e) => setProfileForm({...profileForm, numero: e.target.value})} style={{ ...S.input, marginBottom: 12, textAlign: 'left' }} />
+                <select value={profileForm.ruolo} onChange={(e) => setProfileForm({...profileForm, ruolo: e.target.value})} style={{ ...S.input, marginBottom: 12, textAlign: 'left' }}>
+                  <option>ATT</option>
+                  <option>CEN</option>
+                  <option>DIF</option>
+                  <option>POR</option>
+                </select>
+                <input type="number" placeholder="Età" value={profileForm.eta} onChange={(e) => setProfileForm({...profileForm, eta: e.target.value})} style={{ ...S.input, marginBottom: 12, textAlign: 'left' }} />
+                <input type="number" placeholder="Altezza (cm)" value={profileForm.altezza} onChange={(e) => setProfileForm({...profileForm, altezza: e.target.value})} style={{ ...S.input, marginBottom: 12, textAlign: 'left' }} />
+                <input type="number" placeholder="Peso (kg)" value={profileForm.peso} onChange={(e) => setProfileForm({...profileForm, peso: e.target.value})} style={{ ...S.input, marginBottom: 12, textAlign: 'left' }} />
+                <select value={profileForm.piede} onChange={(e) => setProfileForm({...profileForm, piede: e.target.value})} style={{ ...S.input, marginBottom: 20, textAlign: 'left' }}>
+                  <option>Destro</option>
+                  <option>Sinistro</option>
+                  <option>Ambidestro</option>
+                </select>
+                <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+                  <button style={S.cancelBtn} onClick={() => { setShowProfileModal(false); setProfileForm({ nickname: '', numero: '', ruolo: 'ATT', eta: '', altezza: '', peso: '', piede: 'Destro' }); }}>ANNULLA</button>
+                  <button style={S.saveBtn} onClick={handleSaveProfile}>💾 SALVA</button>
                 </div>
               </div>
             </div>
@@ -676,10 +801,11 @@ export default function App() {
                 <div style={S.tableHead}>
                   <span style={{ width: 30, textAlign: "center" }}>#</span>
                   <span style={{ flex: 3 }}>Giocatore</span>
-                  <span style={{ flex: 1, textAlign: "center" }}>Presenze</span>
+                  <span style={{ flex: 1, textAlign: "center" }}>Pres.</span>
                   <span style={{ flex: 1, textAlign: "center" }}>V</span>
                   <span style={{ flex: 1, textAlign: "center" }}>P</span>
                   <span style={{ flex: 1, textAlign: "center" }}>S</span>
+                  <span style={{ flex: 1, textAlign: "center" }}>MVP</span>
                 </div>
                 {getSortedPlayers().map((p, i) => (
                   <div key={p.name} style={{ ...S.tableRow, background: i % 2 === 0 ? "rgba(255,255,255,0.02)" : "transparent" }}>
@@ -689,6 +815,7 @@ export default function App() {
                     <span style={{ flex: 1, textAlign: "center", color: "#16a34a" }}>{p.wins || 0}</span>
                     <span style={{ flex: 1, textAlign: "center", color: "#94a3b8" }}>{p.draws || 0}</span>
                     <span style={{ flex: 1, textAlign: "center", color: "#f87171" }}>{p.losses || 0}</span>
+                    <span style={{ flex: 1, textAlign: "center", color: "#eab308" }}>{p.mvpCount || 0}</span>
                   </div>
                 ))}
               </div>
@@ -696,6 +823,7 @@ export default function App() {
                 {[
                   { label: "🏃 Più presente", key: "gamesPlayed", val: p => p.gamesPlayed + " presenze" },
                   { label: "🏆 Più vittorie", key: "wins", val: p => (p.wins || 0) + " vittorie" },
+                  { label: "⭐ Più MVP", key: "mvpCount", val: p => (p.mvpCount || 0) + " MVP" },
                 ].map(stat => {
                   const sorted = getSortedPlayers(stat.key);
                   const top = sorted[0];
@@ -730,7 +858,12 @@ export default function App() {
                 <span style={{ fontSize: 28, fontWeight: 700, letterSpacing: 3 }}>{m.scoreA} — {m.scoreB}</span>
                 <span style={{ color: m.winner === "B" ? "#4ade80" : "#e2e8f0" }}>Squadra B</span>
               </div>
-              <div style={{ textAlign: "center", marginTop: 8, fontSize: 12, color: "#64748b" }}>
+              {m.mvp && (
+                <div style={{ textAlign: "center", marginTop: 8, fontSize: 14, color: "#eab308", fontFamily: "'Oswald', sans-serif" }}>
+                  ⭐ MVP: {m.mvp}
+                </div>
+              )}
+              <div style={{ textAlign: "center", marginTop: 4, fontSize: 12, color: "#64748b" }}>
                 {Array.isArray(m.players) ? `${m.players.length} giocatori` : ""}
               </div>
             </div>
