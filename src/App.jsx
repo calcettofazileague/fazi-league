@@ -779,13 +779,11 @@ export default function App() {
       <button onClick={() => setShowProfileModal(true)} style={{ ...S.actionBtn, ...S.actionPrimary }}>+ CREA PROFILO</button>
     </div>
 
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 20 }}>
+    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', justifyContent: 'center', padding: '0 0 20px' }}>
       {Object.entries(players)
         .map(([nickname, data]) => {
-          // MATCHING ROBUSTO: cerca stats con case-insensitive
           const statsKey = Object.keys(playerStats).find(k => k.toLowerCase() === nickname.toLowerCase());
           const stats = statsKey ? playerStats[statsKey] : null;
-          
           return {
             nickname,
             ...data,
@@ -799,97 +797,81 @@ export default function App() {
         .sort((a, b) => b.presences - a.presences)
         .map(p => {
           const tier = getTierInfo(p.presences);
+          const winRate = p.presences > 0 ? Math.round((p.wins / p.presences) * 100) : 0;
           return (
             <div 
               key={p.nickname} 
-              style={{ 
-                backgroundImage: tier.gradient,  // ← FIX: usa backgroundImage
-                borderRadius: 16, 
-                padding: 24, 
-                textAlign: 'center', 
-                position: 'relative', 
-                boxShadow: '0 8px 24px rgba(0,0,0,0.4)', 
-                cursor: adminMode ? 'pointer' : 'default' 
-              }}
+              style={{ width: 190, borderRadius: 14, overflow: 'hidden', border: `2px solid ${tier.color}`, background: '#0d1117', flexShrink: 0, position: 'relative', boxShadow: '0 8px 24px rgba(0,0,0,0.4)', cursor: adminMode ? 'pointer' : 'default' }}
               onClick={() => adminMode && startEditingPlayerStats(p)}
             >
+              {/* X rossa admin */}
               {adminMode && (
-                <button 
-                  onClick={(e) => { e.stopPropagation(); handleDeletePlayer(p.nickname); }} 
-                  style={{ 
-                    position: 'absolute', 
-                    top: 10, 
-                    right: 10, 
-                    background: '#dc2626', 
-                    border: 'none', 
-                    color: '#fff', 
-                    width: 28, 
-                    height: 28, 
-                    borderRadius: '50%', 
-                    cursor: 'pointer', 
-                    fontSize: 16, 
-                    fontWeight: 'bold', 
-                    zIndex: 10 
-                  }}
-                >✕</button>
+                <button onClick={(e) => { e.stopPropagation(); handleDeletePlayer(p.nickname); }} style={{ position: 'absolute', top: 6, right: 6, background: '#dc2626', border: 'none', color: '#fff', width: 24, height: 24, borderRadius: '50%', cursor: 'pointer', fontSize: 13, fontWeight: 'bold', zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
               )}
-              <div style={{ 
-                fontSize: 64, 
-                fontFamily: "'Oswald', sans-serif", 
-                fontWeight: 700, 
-                color: '#000', 
-                marginBottom: 8, 
-                lineHeight: 1 
-              }}>
-                {p.numero}
-              </div>
-              <div style={{ 
-                fontSize: 24, 
-                fontFamily: "'Oswald', sans-serif", 
-                fontWeight: 700, 
-                color: '#000', 
-                marginBottom: 12, 
-                letterSpacing: 1 
-              }}>
-                {p.nickname}
-              </div>
-              <div style={{ 
-                fontSize: 12, 
-                color: '#000', 
-                marginBottom: 16, 
-                fontFamily: "'Source Sans 3', sans-serif", 
-                fontWeight: 600, 
-                opacity: 0.8 
-              }}>
-                {p.ruolo} • {tier.name}
-              </div>
-              <div style={{ 
-                background: 'rgba(0,0,0,0.2)', 
-                borderRadius: 10, 
-                padding: 12, 
-                fontSize: 13, 
-                color: '#000', 
-                fontFamily: "'Source Sans 3', sans-serif", 
-                fontWeight: 600 
-              }}>
-                <div style={{ marginBottom: 4 }}><strong>{p.presences}</strong> presenze</div>
-                <div style={{ marginBottom: 4 }}><strong>{p.wins}</strong> vittorie</div>
-                <div style={{ marginBottom: 4 }}><strong>{p.mvps}</strong> MVP</div>
-                <div style={{ marginTop: 8, fontSize: 11, opacity: 0.8 }}>
-                  {p.eta}y • {p.altezza}cm • {p.peso}kg • {p.piede}
+
+              {/* ── MAGLIA (retro) ── */}
+              <div style={{ backgroundImage: tier.gradient, position: 'relative', height: 200, overflow: 'hidden' }}>
+                {/* Texture tessuto */}
+                <div style={{ position: 'absolute', inset: 0, backgroundImage: 'repeating-linear-gradient(180deg, transparent, transparent 2px, rgba(255,255,255,0.03) 2px, rgba(255,255,255,0.03) 4px)', pointerEvents: 'none' }} />
+                {/* Colletto */}
+                <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', width: 50, height: 16, borderRadius: '0 0 25px 25px', background: 'rgba(0,0,0,0.25)' }} />
+                {/* Cuciture spalle */}
+                <div style={{ position: 'absolute', top: 14, left: 0, width: '30%', height: 2, background: 'rgba(0,0,0,0.12)' }} />
+                <div style={{ position: 'absolute', top: 14, right: 0, width: '30%', height: 2, background: 'rgba(0,0,0,0.12)' }} />
+                {/* Cucitura centrale schiena */}
+                <div style={{ position: 'absolute', top: 16, left: '50%', width: 1, height: '100%', background: 'rgba(0,0,0,0.05)' }} />
+
+                {/* Ruolo in alto a destra */}
+                <div style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(0,0,0,0.4)', borderRadius: 6, padding: '2px 8px', fontSize: 10, fontFamily: "'Oswald',sans-serif", letterSpacing: 2, color: '#fff', zIndex: 2 }}>{p.ruolo || 'ATT'}</div>
+                {/* Tier in alto a sinistra */}
+                <div style={{ position: 'absolute', top: 8, left: 8, background: 'rgba(0,0,0,0.4)', borderRadius: 6, padding: '2px 8px', fontSize: 8, fontFamily: "'Oswald',sans-serif", letterSpacing: 2, color: 'rgba(255,255,255,0.7)', zIndex: 2 }}>{tier.name}</div>
+
+                {/* NOME stampato sulla maglia */}
+                <div style={{ position: 'absolute', top: 30, left: 0, right: 0, textAlign: 'center', zIndex: 1 }}>
+                  <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: p.nickname.length > 10 ? 13 : 17, fontWeight: 800, letterSpacing: 3, color: '#fff', textTransform: 'uppercase', textShadow: '0 2px 4px rgba(0,0,0,0.3)', padding: '0 8px', wordBreak: 'break-word', lineHeight: 1.2 }}>{p.nickname}</div>
+                </div>
+
+                {/* NUMERO GRANDE */}
+                <div style={{ position: 'absolute', top: 55, left: 0, right: 0, textAlign: 'center', zIndex: 1 }}>
+                  <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 74, fontWeight: 800, color: '#fff', lineHeight: 1, textShadow: '0 3px 8px rgba(0,0,0,0.3), 2px 2px 0 rgba(0,0,0,0.1)', letterSpacing: 4 }}>{p.numero || '?'}</div>
+                </div>
+
+                {/* Info fisiche in basso sulla maglia */}
+                <div style={{ position: 'absolute', bottom: 8, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 4, zIndex: 1, flexWrap: 'wrap', padding: '0 6px' }}>
+                  {p.eta > 0 && <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.6)', fontFamily: "'Oswald',sans-serif", letterSpacing: 1, background: 'rgba(0,0,0,0.25)', borderRadius: 4, padding: '1px 5px' }}>{p.eta}y</span>}
+                  {p.altezza > 0 && <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.6)', fontFamily: "'Oswald',sans-serif", letterSpacing: 1, background: 'rgba(0,0,0,0.25)', borderRadius: 4, padding: '1px 5px' }}>{p.altezza}cm</span>}
+                  {p.peso > 0 && <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.6)', fontFamily: "'Oswald',sans-serif", letterSpacing: 1, background: 'rgba(0,0,0,0.25)', borderRadius: 4, padding: '1px 5px' }}>{p.peso}kg</span>}
+                  {p.piede && <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.6)', fontFamily: "'Oswald',sans-serif", letterSpacing: 1, background: 'rgba(0,0,0,0.25)', borderRadius: 4, padding: '1px 5px' }}>🦶{p.piede[0]}</span>}
                 </div>
               </div>
-              {adminMode && (
-                <div style={{ 
-                  marginTop: 8, 
-                  fontSize: 11, 
-                  color: '#000', 
-                  opacity: 0.6, 
-                  fontFamily: "'Oswald', sans-serif" 
-                }}>
-                  Click per modificare stats
+
+              {/* ── STATS SOTTO LA MAGLIA ── */}
+              <div style={{ padding: '8px 6px 4px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 3 }}>
+                <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 5, padding: '3px 0', textAlign: 'center' }}>
+                  <span style={{ fontFamily: "'Oswald',sans-serif", fontSize: 14, fontWeight: 700, color: '#4ade80', display: 'block' }}>{p.presences}</span>
+                  <span style={{ fontSize: 7, fontFamily: "'Oswald',sans-serif", letterSpacing: 1, color: '#64748b' }}>PRE</span>
                 </div>
-              )}
+                <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 5, padding: '3px 0', textAlign: 'center' }}>
+                  <span style={{ fontFamily: "'Oswald',sans-serif", fontSize: 14, fontWeight: 700, color: '#eab308', display: 'block' }}>{p.mvps}</span>
+                  <span style={{ fontSize: 7, fontFamily: "'Oswald',sans-serif", letterSpacing: 1, color: '#64748b' }}>MVP</span>
+                </div>
+                <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 5, padding: '3px 0', textAlign: 'center' }}>
+                  <span style={{ fontFamily: "'Oswald',sans-serif", fontSize: 14, fontWeight: 700, color: '#16a34a', display: 'block' }}>{p.wins}</span>
+                  <span style={{ fontSize: 7, fontFamily: "'Oswald',sans-serif", letterSpacing: 1, color: '#64748b' }}>VIT</span>
+                </div>
+                <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 5, padding: '3px 0', textAlign: 'center' }}>
+                  <span style={{ fontFamily: "'Oswald',sans-serif", fontSize: 14, fontWeight: 700, color: '#f87171', display: 'block' }}>{p.losses}</span>
+                  <span style={{ fontSize: 7, fontFamily: "'Oswald',sans-serif", letterSpacing: 1, color: '#64748b' }}>SCO</span>
+                </div>
+              </div>
+              {/* WIN RATE */}
+              <div style={{ padding: '0 6px 8px' }}>
+                <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 3, height: 5, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', borderRadius: 3, background: 'linear-gradient(90deg, #16a34a, #4ade80)', width: `${winRate}%` }} />
+                </div>
+                <div style={{ textAlign: 'center', fontSize: 8, color: '#64748b', fontFamily: "'Oswald',sans-serif", marginTop: 2, letterSpacing: 1 }}>{winRate}% WIN</div>
+              </div>
+              {adminMode && <div style={{ textAlign: 'center', fontSize: 9, color: '#eab308', padding: '0 0 6px', fontFamily: "'Oswald',sans-serif" }}>Click per edit stats</div>}
             </div>
           );
         })}
