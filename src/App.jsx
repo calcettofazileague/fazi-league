@@ -120,30 +120,34 @@ function App() {
     }
   };
 
-  const handleSignup = (dayKey) => {
-    if (!username.trim()) return alert('Inserisci il tuo nome!');
-    if (!selectedWeek) return;
+ const handleSignup = (dayKey) => {
+  if (!username.trim()) return alert('Inserisci il tuo nome!');
+  if (!selectedWeek) return;
 
-    const weekDates = getWeekDates();
-    const dayIndex = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'].indexOf(dayKey);
-    const targetDate = weekDates[dayIndex];
-    const dateId = getDateId(targetDate);
-    const closed = isMatchClosed(targetDate);
-    
-    if (closed && !adminMode) return alert('Iscrizioni chiuse!');
+  const weekDates = getWeekDates();
+  const dayKeys = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+  const dayIndex = dayKeys.indexOf(dayKey);
+  
+  if (dayIndex === -1) return;
+  
+  const targetDate = weekDates[dayIndex];
+  const dateId = getDateId(targetDate);
+  const closed = isMatchClosed(targetDate);
+  
+  if (closed && !adminMode) return alert('Iscrizioni chiuse!');
 
-    const current = signups[dateId] || { titolari: [], riserve: [] };
-    const all = [...current.titolari, ...current.riserve];
-    if (all.includes(username)) return alert('Sei già iscritto!');
+  const current = signups[dateId] || { titolari: [], riserve: [] };
+  const all = [...current.titolari, ...current.riserve];
+  if (all.includes(username)) return alert('Sei già iscritto!');
 
-    if (current.titolari.length < 10) {
-      set(ref(database, `signups/${dateId}/titolari`), [...current.titolari, username]);
-    } else if (current.riserve.length < 3) {
-      set(ref(database, `signups/${dateId}/riserve`), [...current.riserve, username]);
-    } else {
-      alert('Liste piene!');
-    }
-  };
+  if (current.titolari.length < 10) {
+    set(ref(database, `signups/${dateId}/titolari`), [...current.titolari, username]);
+  } else if (current.riserve.length < 3) {
+    set(ref(database, `signups/${dateId}/riserve`), [...current.riserve, username]);
+  } else {
+    alert('Liste piene!');
+  }
+};
 
   const handleRemoveSignup = (name, list, dateId) => {
     const weekDates = getWeekDates();
