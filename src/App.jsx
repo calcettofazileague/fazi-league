@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { db } from "./firebase.js";
 import { ref, set, onValue, push, get, remove } from "firebase/database";
 
@@ -125,6 +125,8 @@ export default function App() {
   const [editingTeams, setEditingTeams] = useState(false);
   const [editedTeams, setEditedTeams] = useState(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [editingMatch, setEditingMatch] = useState(null);
+  const [editingPlayer, setEditingPlayer] = useState(null);
   const [profileForm, setProfileForm] = useState({
     nickname: '', numero: '', ruolo: 'ATT', eta: '', altezza: '', peso: '', piede: 'Destro'
   });
@@ -324,6 +326,40 @@ export default function App() {
     showToast("Partita registrata! Presenze aggiornate.");
   };
 
+  // ─── EDIT MATCH (ADMIN) ───
+  const startEditingMatch = (match) => {
+    setEditingMatch({
+      ...match,
+      scoreA: match.scoreA || 0,
+      scoreB: match.scoreB || 0,
+      mvp: match.mvp || ''
+    });
+  };
+
+  const saveEditedMatch = async () => {
+    if (!editingMatch) return;
+    
+    const { id, scoreA, scoreB, mvp, players: matchPlayers } = editingMatch;
+    
+    if (!mvp) return showToast("Seleziona un MVP!", "error");
+    
+    const winner = scoreA > scoreB ? "A" : scoreB > scoreA ? "B" : "draw";
+    
+    const updatedMatch = {
+      ...matchHistory.find(m => m.id === id),
+      scoreA,
+      scoreB,
+      winner,
+      mvp
+    };
+    
+    await fbWrite(`matchHistory/${id}`, updatedMatch);
+    
+    setMatchHistory(matchHistory.map(m => m.id === id ? updatedMatch : m));
+    setEditingMatch(null);
+    showToast("Partita aggiornata!");
+  };
+
   // ─── PLAYER PROFILES ───
   const handleSaveProfile = async () => {
     const { nickname, numero, ruolo, eta, altezza, peso, piede } = profileForm;
@@ -350,6 +386,36 @@ export default function App() {
     showToast("Profilo eliminato!");
   };
 
+  // ─── EDIT PLAYER STATS (ADMIN) ───
+  const startEditingPlayerStats = (player) => {
+    const stats = playerStats[player.nickname.toLowerCase()] || { gamesPlayed: 0, wins: 0, draws: 0, losses: 0, mvpCount: 0 };
+    setEditingPlayer({
+      nickname: player.nickname,
+      ...stats
+    });
+  };
+
+  const saveEditedPlayerStats = async () => {
+    if (!editingPlayer) return;
+    
+    const { nickname, gamesPlayed, wins, draws, losses, mvpCount } = editingPlayer;
+    const key = nickname.toLowerCase();
+    
+    const updatedStats = {
+      name: nickname,
+      gamesPlayed: parseInt(gamesPlayed) || 0,
+      wins: parseInt(wins) || 0,
+      draws: parseInt(draws) || 0,
+      losses: parseInt(losses) || 0,
+      mvpCount: parseInt(mvpCount) || 0
+    };
+    
+    await fbWrite(`playerStats/${key}`, updatedStats);
+    setPlayerStats({ ...playerStats, [key]: updatedStats });
+    setEditingPlayer(null);
+    showToast("Statistiche aggiornate!");
+  };
+
   // ─── ADMIN ───
   const handleTitleClick = () => {
     const n = adminClicks + 1;
@@ -359,6 +425,7 @@ export default function App() {
   };
 
   const resetWeek = async () => {
+    if (!window.confirm("Azzerare tutte le liste della settimana?")) return;
     const empty = {};
     MATCH_DAYS.forEach(d => (empty[d.key] = []));
     setSignups(empty);
@@ -370,6 +437,7 @@ export default function App() {
   };
 
   const resetAllStats = async () => {
+    if (!window.confirm("ATTENZIONE: Azzerare TUTTE le statistiche? Questa azione è irreversibile!")) return;
     setPlayerStats({});
     setMatchHistory([]);
     await fbWrite("playerStats", {});
@@ -724,24 +792,37 @@ export default function App() {
               .map(p => {
                 const tier = getTierInfo(p.presences);
                 return (
-                  <div key={p.nickname} style={{ background: tier.gradient, borderRadius: 16, padding: 24, textAlign: 'center', position: 'relative', boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
+                  <div 
+                    key={p.nickname} 
+                    style={{ background: tier.gradient, borderRadius: 16, padding: 24, textAlign: 'center', position: 'relative', boxShadow: '0 8px 24px rgba(0,0,0,0.4)', cursor: adminMode ? 'pointer' : 'default' }}
+                    onClick={() => adminMode && startEditingPlayerStats(p)}
+                  >
                     {adminMode && (
-                      <button onClick={() => handleDeletePlayer(p.nickname)} style={{ position: 'absolute', top: 10, right: 10, background: '#dc2626', border: 'none', color: '#fff', width: 28, height: 28, borderRadius: '50%', cursor: 'pointer', fontSize: 16, fontWeight: 'bold' }}>✕</button>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); handleDeletePlayer(p.nickname); }} 
+                        style={{ position: 'absolute', top: 10, right: 10, background: '#dc2626', border: 'none', color: '#fff', width: 28, height: 28, borderRadius: '50%', cursor: 'pointer', fontSize: 16, fontWeight: 'bold', zIndex: 10 }}
+                      >✕</button>
                     )}
-                    <div style={{ fontSize: 56, fontFamily: "'Oswald', sans-serif", fontWeight: 700, color: '#000', marginBottom: 8 }}>{p.numero}</div>
-                    <div style={{ fontSize: 22, fontFamily: "'Oswald', sans-serif", fontWeight: 700, color: '#000', marginBottom: 12, letterSpacing: 1 }}>{p.nickname}</div>
-                    <div style={{ fontSize: 12, color: '#000', marginBottom: 16, fontFamily: "'Source Sans 3', sans-serif", fontWeight: 600 }}>{p.ruolo} • {tier.name}</div>
-                    <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 10, padding: 12, fontSize: 13, color: '#000', fontFamily: "'Source Sans 3', sans-serif" }}>
-                      <div><strong>{p.presences}</strong> presenze</div>
-                      <div><strong>{p.wins}</strong> vittorie</div>
-                      <div><strong>{p.mvps}</strong> MVP</div>
-                      <div style={{ marginTop: 6, fontSize: 11 }}>{p.eta}y • {p.altezza}cm • {p.peso}kg • {p.piede}</div>
+                    <div style={{ fontSize: 64, fontFamily: "'Oswald', sans-serif", fontWeight: 700, color: '#000', marginBottom: 8, lineHeight: 1 }}>{p.numero}</div>
+                    <div style={{ fontSize: 24, fontFamily: "'Oswald', sans-serif", fontWeight: 700, color: '#000', marginBottom: 12, letterSpacing: 1 }}>{p.nickname}</div>
+                    <div style={{ fontSize: 12, color: '#000', marginBottom: 16, fontFamily: "'Source Sans 3', sans-serif", fontWeight: 600, opacity: 0.8 }}>{p.ruolo} • {tier.name}</div>
+                    <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 10, padding: 12, fontSize: 13, color: '#000', fontFamily: "'Source Sans 3', sans-serif", fontWeight: 600 }}>
+                      <div style={{ marginBottom: 4 }}><strong>{p.presences}</strong> presenze</div>
+                      <div style={{ marginBottom: 4 }}><strong>{p.wins}</strong> vittorie</div>
+                      <div style={{ marginBottom: 4 }}><strong>{p.mvps}</strong> MVP</div>
+                      <div style={{ marginTop: 8, fontSize: 11, opacity: 0.8 }}>{p.eta}y • {p.altezza}cm • {p.peso}kg • {p.piede}</div>
                     </div>
+                    {adminMode && (
+                      <div style={{ marginTop: 8, fontSize: 11, color: '#000', opacity: 0.6, fontFamily: "'Oswald', sans-serif" }}>
+                        Click per modificare stats
+                      </div>
+                    )}
                   </div>
                 );
               })}
           </div>
 
+          {/* MODAL CREA PROFILO */}
           {showProfileModal && (
             <div style={S.overlay}>
               <div style={S.modal}>
@@ -765,6 +846,39 @@ export default function App() {
                 <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
                   <button style={S.cancelBtn} onClick={() => { setShowProfileModal(false); setProfileForm({ nickname: '', numero: '', ruolo: 'ATT', eta: '', altezza: '', peso: '', piede: 'Destro' }); }}>ANNULLA</button>
                   <button style={S.saveBtn} onClick={handleSaveProfile}>💾 SALVA</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* MODAL EDIT PLAYER STATS */}
+          {editingPlayer && (
+            <div style={S.overlay}>
+              <div style={S.modal}>
+                <h3 style={S.modalTitle}>Modifica Statistiche — {editingPlayer.nickname}</h3>
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4, fontFamily: "'Oswald', sans-serif" }}>PRESENZE</label>
+                  <input type="number" value={editingPlayer.gamesPlayed} onChange={(e) => setEditingPlayer({...editingPlayer, gamesPlayed: e.target.value})} style={{ ...S.input, textAlign: 'left' }} />
+                </div>
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4, fontFamily: "'Oswald', sans-serif" }}>VITTORIE</label>
+                  <input type="number" value={editingPlayer.wins} onChange={(e) => setEditingPlayer({...editingPlayer, wins: e.target.value})} style={{ ...S.input, textAlign: 'left' }} />
+                </div>
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4, fontFamily: "'Oswald', sans-serif" }}>PAREGGI</label>
+                  <input type="number" value={editingPlayer.draws} onChange={(e) => setEditingPlayer({...editingPlayer, draws: e.target.value})} style={{ ...S.input, textAlign: 'left' }} />
+                </div>
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4, fontFamily: "'Oswald', sans-serif" }}>SCONFITTE</label>
+                  <input type="number" value={editingPlayer.losses} onChange={(e) => setEditingPlayer({...editingPlayer, losses: e.target.value})} style={{ ...S.input, textAlign: 'left' }} />
+                </div>
+                <div style={{ marginBottom: 20 }}>
+                  <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4, fontFamily: "'Oswald', sans-serif" }}>MVP</label>
+                  <input type="number" value={editingPlayer.mvpCount} onChange={(e) => setEditingPlayer({...editingPlayer, mvpCount: e.target.value})} style={{ ...S.input, textAlign: 'left' }} />
+                </div>
+                <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+                  <button style={S.cancelBtn} onClick={() => setEditingPlayer(null)}>ANNULLA</button>
+                  <button style={S.saveBtn} onClick={saveEditedPlayerStats}>💾 SALVA</button>
                 </div>
               </div>
             </div>
@@ -848,26 +962,98 @@ export default function App() {
           {matchHistory.length === 0 ? (
             <p style={S.emptyState}>Nessuna partita registrata.</p>
           ) : matchHistory.map(m => (
-            <div key={m.id} style={S.histCard}>
+            <div 
+              key={m.id} 
+              style={{ ...S.histCard, cursor: adminMode ? 'pointer' : 'default' }}
+              onClick={() => adminMode && startEditingMatch(m)}
+            >
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
                 <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 16, letterSpacing: 1.5 }}>{MATCH_DAYS.find(d => d.key === m.day)?.label || m.day}</span>
                 <span style={{ fontSize: 13, color: "#64748b" }}>{new Date(m.date).toLocaleDateString("it-IT")}</span>
               </div>
-              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 16, fontFamily: "'Oswald', sans-serif", fontSize: 15, letterSpacing: 1 }}>
+              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 16, fontFamily: "'Oswald', sans-serif", fontSize: 15, letterSpacing: 1, marginBottom: 12 }}>
                 <span style={{ color: m.winner === "A" ? "#4ade80" : "#e2e8f0" }}>Squadra A</span>
                 <span style={{ fontSize: 28, fontWeight: 700, letterSpacing: 3 }}>{m.scoreA} — {m.scoreB}</span>
                 <span style={{ color: m.winner === "B" ? "#4ade80" : "#e2e8f0" }}>Squadra B</span>
               </div>
               {m.mvp && (
-                <div style={{ textAlign: "center", marginTop: 8, fontSize: 14, color: "#eab308", fontFamily: "'Oswald', sans-serif" }}>
+                <div style={{ textAlign: "center", marginBottom: 12, fontSize: 14, color: "#eab308", fontFamily: "'Oswald', sans-serif" }}>
                   ⭐ MVP: {m.mvp}
                 </div>
               )}
-              <div style={{ textAlign: "center", marginTop: 4, fontSize: 12, color: "#64748b" }}>
-                {Array.isArray(m.players) ? `${m.players.length} giocatori` : ""}
-              </div>
+              {m.players && Array.isArray(m.players) && (
+                <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: 12, fontSize: 12 }}>
+                  <div style={{ color: '#94a3b8', fontFamily: "'Oswald', sans-serif", marginBottom: 4 }}>
+                    {m.players.length} giocatori
+                  </div>
+                  <div style={{ color: '#e2e8f0', lineHeight: 1.6 }}>
+                    {m.players.join(', ')}
+                  </div>
+                </div>
+              )}
+              {adminMode && (
+                <div style={{ marginTop: 12, fontSize: 11, color: '#eab308', textAlign: 'center', fontFamily: "'Oswald', sans-serif" }}>
+                  Click per modificare
+                </div>
+              )}
             </div>
           ))}
+
+          {/* MODAL EDIT MATCH */}
+          {editingMatch && (
+            <div style={S.overlay}>
+              <div style={S.modal}>
+                <h3 style={S.modalTitle}>Modifica Partita — {MATCH_DAYS.find(d => d.key === editingMatch.day)?.label}</h3>
+                <div style={S.scoreRow}>
+                  <div style={S.scoreTeam}>
+                    <span style={S.scoreLabel}>🟢 Squadra A</span>
+                    <div style={S.scoreControl}>
+                      <button style={S.scoreBtn} onClick={() => setEditingMatch(p => ({ ...p, scoreA: Math.max(0, p.scoreA - 1) }))}>−</button>
+                      <span style={S.scoreNum}>{editingMatch.scoreA}</span>
+                      <button style={S.scoreBtn} onClick={() => setEditingMatch(p => ({ ...p, scoreA: p.scoreA + 1 }))}>+</button>
+                    </div>
+                  </div>
+                  <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 24, color: "#64748b" }}>—</span>
+                  <div style={S.scoreTeam}>
+                    <span style={S.scoreLabel}>🟡 Squadra B</span>
+                    <div style={S.scoreControl}>
+                      <button style={S.scoreBtn} onClick={() => setEditingMatch(p => ({ ...p, scoreB: Math.max(0, p.scoreB - 1) }))}>−</button>
+                      <span style={S.scoreNum}>{editingMatch.scoreB}</span>
+                      <button style={S.scoreBtn} onClick={() => setEditingMatch(p => ({ ...p, scoreB: p.scoreB + 1 }))}>+</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: 20 }}>
+                  <label style={{ display: 'block', fontFamily: "'Oswald', sans-serif", fontSize: 14, letterSpacing: 1.5, color: "#eab308", marginBottom: 8 }}>⭐ MVP DELLA PARTITA</label>
+                  <select 
+                    value={editingMatch.mvp} 
+                    onChange={(e) => setEditingMatch(p => ({ ...p, mvp: e.target.value }))}
+                    style={{ width: '100%', padding: '12px', background: '#1a202c', border: '2px solid #eab308', borderRadius: 10, color: '#e2e8f0', fontFamily: "'Oswald', sans-serif", fontSize: 15, cursor: 'pointer' }}
+                  >
+                    <option value="">-- Seleziona MVP --</option>
+                    {editingMatch.players && editingMatch.players.map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {editingMatch.players && (
+                  <div style={{ marginBottom: 20, background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: 12 }}>
+                    <div style={{ color: '#94a3b8', fontFamily: "'Oswald', sans-serif", fontSize: 12, marginBottom: 8 }}>GIOCATORI ({editingMatch.players.length})</div>
+                    <div style={{ color: '#e2e8f0', fontSize: 13, lineHeight: 1.8 }}>
+                      {editingMatch.players.join(', ')}
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+                  <button style={S.cancelBtn} onClick={() => setEditingMatch(null)}>ANNULLA</button>
+                  <button style={S.saveBtn} onClick={saveEditedMatch}>💾 SALVA MODIFICHE</button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
