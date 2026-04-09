@@ -68,10 +68,10 @@ const isLocked = (dayKey) => {
 };
 
 const getTierInfo = (presences) => {
-  if (presences >= 100) return { name: 'LEGGENDA', color: '#FFD700', gradient: 'linear-gradient(135deg, #FFD700 0%, #FFA500 100%)' };
-  if (presences >= 50) return { name: 'ELITE', color: '#C0C0C0', gradient: 'linear-gradient(135deg, #E8E8E8 0%, #A8A8A8 100%)' };
-  if (presences >= 10) return { name: 'VETERANO', color: '#CD7F32', gradient: 'linear-gradient(135deg, #CD7F32 0%, #8B4513 100%)' };
-  return { name: 'ROOKIE', color: '#4A5568', gradient: 'linear-gradient(135deg, #718096 0%, #4A5568 100%)' };
+  if (presences >= 100) return { name: 'LEGGENDA', color: '#a78bfa', gradient: 'linear-gradient(135deg, #7c3aed 0%, #a78bfa 50%, #c4b5fd 100%)' };
+  if (presences >= 50) return { name: 'ELITE', color: '#fbbf24', gradient: 'linear-gradient(135deg, #b45309 0%, #f59e0b 50%, #fde68a 100%)' };
+  if (presences >= 10) return { name: 'VETERANO', color: '#94a3b8', gradient: 'linear-gradient(135deg, #475569 0%, #94a3b8 50%, #e2e8f0 100%)' };
+  return { name: 'ROOKIE', color: '#cd7f32', gradient: 'linear-gradient(135deg, #5c3317 0%, #cd7f32 50%, #daa06d 100%)' };
 };
 
 // ─── BALANCED TEAM ALGORITHM ───
@@ -779,13 +779,14 @@ export default function App() {
       <button onClick={() => setShowProfileModal(true)} style={{ ...S.actionBtn, ...S.actionPrimary }}>+ CREA PROFILO</button>
     </div>
 
-    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', justifyContent: 'center', padding: '0 0 20px' }}>
+    <div style={{ display: 'flex', gap: 16, overflowX: 'auto', padding: '0 0 20px', WebkitOverflowScrolling: 'touch' }}>
       {Object.entries(players)
-        .map(([nickname, data]) => {
-          const statsKey = Object.keys(playerStats).find(k => k.toLowerCase() === nickname.toLowerCase());
+        .map(([key, data]) => {
+          const nick = data.nickname || key;
+          const statsKey = Object.keys(playerStats).find(k => k.toLowerCase() === nick.toLowerCase() || k.toLowerCase() === key.toLowerCase());
           const stats = statsKey ? playerStats[statsKey] : null;
           return {
-            nickname,
+            nickname: nick,
             ...data,
             presences: stats?.gamesPlayed || 0,
             wins: stats?.wins || 0,
