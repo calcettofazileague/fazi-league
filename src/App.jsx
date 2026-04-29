@@ -280,51 +280,62 @@ export default function App() {
     }));
   };
 
-  const saveMatchResult = async () => {
-    if (!matchForm) return;
-    const { dayKey, players, scoreA, scoreB, mvp } = matchForm;
-    
-    if (!mvp || !players[mvp]) return showToast("Seleziona un MVP!", "error");
-    
-    const winner = scoreA > scoreB ? "A" : scoreB > scoreA ? "B" : "draw";
+ const saveMatchResult = async () => {
+  if (!matchForm) return;
+  const { dayKey, players, scoreA, scoreB, mvp } = matchForm;
+  
+  // FIX: check MVP più semplice
+  if (!mvp || mvp === '') {
+    showToast("Seleziona un MVP!", "error");
+    return;
+  }
+  
+  const winner = scoreA > scoreB ? "A" : scoreB > scoreA ? "B" : "draw";
 
-    const newStats = { ...playerStats };
-    Object.entries(players).forEach(([name, data]) => {
-      if (!data.present) return;
-      const key = name.toLowerCase();
-      const prev = newStats[key] || { name, gamesPlayed: 0, wins: 0, draws: 0, losses: 0, mvpCount: 0 };
-      prev.name = name;
-      prev.gamesPlayed += 1;
-      if (winner === "draw") prev.draws = (prev.draws || 0) + 1;
-      else if (data.team === winner) prev.wins = (prev.wins || 0) + 1;
-      else prev.losses = (prev.losses || 0) + 1;
-      if (name === mvp) prev.mvpCount = (prev.mvpCount || 0) + 1;
-      newStats[key] = prev;
-    });
+  const newStats = { ...playerStats };
+  Object.entries(players).forEach(([name, data]) => {
+    if (!data.present) return;
+    const key = name.toLowerCase();
+    const prev = newStats[key] || { name, gamesPlayed: 0, wins: 0, draws: 0, losses: 0, mvpCount: 0 };
+    prev.name = name;
+    prev.gamesPlayed += 1;
+    if (winner === "draw") prev.draws = (prev.draws || 0) + 1;
+    else if (data.team === winner) prev.wins = (prev.wins || 0) + 1;
+    else prev.losses = (prev.losses || 0) + 1;
+    if (name === mvp) prev.mvpCount = (prev.mvpCount || 0) + 1;
+    newStats[key] = prev;
+  });
 
-    const presentPlayers = Object.entries(players).filter(([_, d]) => d.present).map(([n]) => n);
-    const matchId = Date.now();
-    const match = {
-      id: matchId,
-      date: new Date().toISOString(),
-      weekId,
-      day: dayKey,
-      scoreA,
-      scoreB,
-      winner,
-      mvp,
-      players: presentPlayers,
-    };
+  const presentPlayers = Object.entries(players).filter(([_, d]) => d.present).map(([n]) => n);
+  const matchId = Date.now();
+  const match = {
+    id: matchId,
+    date: new Date().toISOString(),
+    weekId,
+    day: dayKey,
+    scoreA,
+    scoreB,
+    winner,
+    mvp,
+    players: presentPlayers,
+  };
 
-    setPlayerStats(newStats);
-    setMatchHistory([match, ...matchHistory]);
+  try {
     await fbWrite("playerStats", newStats);
     await fbWrite(`matchHistory/${matchId}`, match);
+    
+    setPlayerStats(newStats);
+    setMatchHistory([match, ...matchHistory]);
     setMatchForm(null);
     setEditingTeams(false);
     setEditedTeams(null);
+    
     showToast("Partita registrata! Presenze aggiornate.");
-  };
+  } catch (error) {
+    console.error("Errore salvataggio:", error);
+    showToast("Errore nel salvataggio!", "error");
+  }
+};
 
   // ─── EDIT MATCH (ADMIN) ───
   const startEditingMatch = (match) => {
