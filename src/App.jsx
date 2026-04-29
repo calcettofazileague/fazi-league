@@ -284,7 +284,9 @@ export default function App() {
   if (!matchForm) return;
   const { dayKey, players, scoreA, scoreB, mvp } = matchForm;
   
-  // FIX: check MVP più semplice
+  console.log("DEBUG - matchForm:", matchForm);
+  console.log("DEBUG - mvp:", mvp);
+  
   if (!mvp || mvp === '') {
     showToast("Seleziona un MVP!", "error");
     return;
@@ -320,10 +322,16 @@ export default function App() {
     players: presentPlayers,
   };
 
+  console.log("DEBUG - Tentativo salvataggio:", { newStats, match });
+
   try {
+    console.log("DEBUG - Scrivendo playerStats...");
     await fbWrite("playerStats", newStats);
+    
+    console.log("DEBUG - Scrivendo matchHistory...");
     await fbWrite(`matchHistory/${matchId}`, match);
     
+    console.log("DEBUG - Aggiornando state locale...");
     setPlayerStats(newStats);
     setMatchHistory([match, ...matchHistory]);
     setMatchForm(null);
@@ -332,8 +340,8 @@ export default function App() {
     
     showToast("Partita registrata! Presenze aggiornate.");
   } catch (error) {
-    console.error("Errore salvataggio:", error);
-    showToast("Errore nel salvataggio!", "error");
+    console.error("ERRORE COMPLETO:", error);
+    showToast(`Errore: ${error.message}`, "error");
   }
 };
 
