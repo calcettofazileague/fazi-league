@@ -131,7 +131,20 @@ export default function App() {
     nickname: '', numero: '', ruolo: 'ATT', eta: '', altezza: '', peso: '', piede: 'Destro'
   });
 
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const autocompleteRef = useRef(null);
   const teamsGenerated = useRef({});
+
+  // ─── AUTOCOMPLETE CLICK OUTSIDE ───
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (autocompleteRef.current && !autocompleteRef.current.contains(e.target)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const showToast = (msg, type = "success") => {
     setToast({ msg, type });
@@ -550,11 +563,88 @@ export default function App() {
           <p style={{ textAlign: "center", color: "#64748b", fontSize: 13, marginBottom: 16 }}>
             ⏰ Partite alle <strong style={{ color: "#e2e8f0" }}>{MATCH_HOUR}:{String(MATCH_MINUTE).padStart(2, "0")}</strong> — Lista si chiude alle <strong style={{ color: "#eab308" }}>{MATCH_HOUR}:{String(MATCH_MINUTE).padStart(2, "0")}</strong> del giorno
           </p>
-          <div style={S.inputSection}>
-            <div style={S.inputWrap}>
-              <input type="text" placeholder="Il tuo nome..." value={playerName}
-                onChange={e => setPlayerName(e.target.value)} style={S.input} maxLength={20} />
+         <div style={S.inputSection}>
+            <div style={{ ...S.inputWrap, position: 'relative' }} ref={autocompleteRef}>
+              <input
+                type="text"
+                placeholder="Il tuo nome..."
+                value={playerName}
+                onChange={e => {
+                  const val = e.target.value;
+                  // Blocca caratteri speciali vietati da Firebase
+                  if (/[.#$\/\[\]]/.test(val)) {
+                    showToast("❌ Caratteri non permessi: . # $ / [ ]", "error");
+                    return;
+                  }
+                  setPlayerName(val);
+                  setShowSuggestions(val.trim().length > 0);
+                }}
+                onFocus={() => playerName.trim().length > 0 && setShowSuggestions(true)}
+                style={S.input}
+                maxLength={20}
+                autoComplete="off"
+              />
               <div style={S.inputGlow} />
+
+              {/* DROPDOWN AUTOCOMPLETE */}
+              {showSuggestions && (() => {
+                const query = playerName.trim().toLowerCase();
+                // Raccoglie nomi da: profili carriere + iscrizioni settimana corrente
+                const fromProfiles = Object.values(players).map(p => p.nickname || p.key).filter(Boolean);
+                const fromSignups = Object.values(signups).flat();
+                const allNames = [...new Set([...fromProfiles, ...fromSignups])];
+                const suggestions = allNames
+                  .filter(n => n.toLowerCase().includes(query) && n.toLowerCase() !== query)
+                  .sort((a, b) => a.localeCompare(b))
+                  .slice(0, 6);
+
+                if (suggestions.length === 0) return null;
+
+                return (
+                  <div style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    right: 0,
+                    marginTop: 4,
+                    background: '#1a1a2e',
+                    border: '1px solid rgba(22,163,74,0.4)',
+                    borderRadius: 12,
+                    overflow: 'hidden',
+                    zIndex: 100,
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.5)'
+                  }}>
+                    {suggestions.map((name, i) => (
+                      <div
+                        key={name}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          setPlayerName(name);
+                          setShowSuggestions(false);
+                        }}
+                        style={{
+                          padding: '12px 18px',
+                          cursor: 'pointer',
+                          fontSize: 15,
+                          fontWeight: 600,
+                          color: '#e2e8f0',
+                          borderTop: i > 0 ? '1px solid rgba(255,255,255,0.04)' : 'none',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 10,
+                          background: 'transparent',
+                          transition: 'background 0.15s'
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(22,163,74,0.12)'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                      >
+                        <span style={{ color: '#16a34a', fontSize: 13 }}>⚽</span>
+                        {name}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           </div>
 
@@ -626,8 +716,9 @@ export default function App() {
             <p style={S.footerText}>📋 <strong>Iscrizioni:</strong> Chiusura ore 19:30. Max 10 titolari + 3 riserve.</p>
             <p style={S.footerSub}>⚖️ <strong>Squadre:</strong> Bilanciamento automatico basato su presenze (snake draft).</p>
             <p style={S.footerSub}>🏆 <strong>Tier:</strong> ROOKIE (0-9) → VETERANO (10-49) → ELITE (50-99) → LEGGENDA (100+)</p>
+            <p style={{ ...S.footerSub, marginTop: 12, color: '#f59e0b' }}>⚠️ <strong>Usa sempre lo stesso nickname</strong> per non perdere le tue statistiche.</p>
+            <p style={{ ...S.footerSub, color: '#f87171' }}>🚫 <strong>No caratteri speciali</strong> nel nome: vietati <code style={{ background: 'rgba(255,255,255,0.08)', padding: '1px 6px', borderRadius: 4 }}>. # $ / [ ]</code></p>
           </div>
-        </div>
       )}
 
       {/* ═══ TAB: SQUADRE ═══ */}
