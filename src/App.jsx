@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from "react";
 import { db } from "./firebase.js";
 import { ref, set, onValue, push, get, remove } from "firebase/database";
 
-// ─── CONFIG ───
 const MATCH_DAYS = [
   { key: "monday", label: "Lunedì", jsDay: 1 },
   { key: "tuesday", label: "Martedì", jsDay: 2 },
@@ -16,16 +15,12 @@ const MAX_TOTAL = MAX_PLAYERS + MAX_RESERVES;
 const TEAM_SIZE = 5;
 const MATCH_HOUR = 19;
 const MATCH_MINUTE = 30;
-const LOCK_HOURS_BEFORE = 0;
 
-// Get the Monday that defines the active match week
 const getActiveMonday = () => {
   const now = new Date();
   const currentDay = now.getDay();
-
   const monday = new Date(now);
   monday.setHours(0, 0, 0, 0);
-
   if (currentDay >= 1 && currentDay <= 5) {
     monday.setDate(now.getDate() - (currentDay - 1));
   } else {
@@ -54,7 +49,7 @@ const getWeekDates = () => {
 };
 
 const formatDate = (date) => {
-  const months = ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"];
+  const months = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
   return `${date.getDate()} ${months[date.getMonth()]}`;
 };
 
@@ -74,18 +69,14 @@ const getTierInfo = (presences) => {
   return { name: 'ROOKIE', color: '#cd7f32', gradient: 'linear-gradient(135deg, #5c3317 0%, #cd7f32 50%, #daa06d 100%)' };
 };
 
-// ─── BALANCED TEAM ALGORITHM ───
 function balanceTeams(players, playerStats) {
   const scored = players.map((name) => {
     const s = playerStats[name.toLowerCase()] || { gamesPlayed: 0 };
     return { name, presenze: s.gamesPlayed || 0 };
   });
   scored.sort((a, b) => b.presenze - a.presenze);
-
-  const teamA = [];
-  const teamB = [];
+  const teamA = [], teamB = [];
   let sumA = 0, sumB = 0;
-
   for (const p of scored) {
     if (teamA.length >= TEAM_SIZE) { teamB.push(p); sumB += p.presenze; }
     else if (teamB.length >= TEAM_SIZE) { teamA.push(p); sumA += p.presenze; }
@@ -95,18 +86,14 @@ function balanceTeams(players, playerStats) {
   return { teamA, teamB, sumA, sumB };
 }
 
-// ─── FIREBASE HELPERS ───
 function fbWrite(path, data) {
   return set(ref(db, path), data).catch((err) => console.error("Firebase write error:", err));
 }
 
 function fbListen(path, callback) {
-  return onValue(ref(db, path), (snapshot) => {
-    callback(snapshot.val());
-  });
+  return onValue(ref(db, path), (snapshot) => { callback(snapshot.val()); });
 }
 
-// ─── MAIN APP ───
 export default function App() {
   const [tab, setTab] = useState("signup");
   const [playerName, setPlayerName] = useState("");
@@ -130,12 +117,16 @@ export default function App() {
   const [profileForm, setProfileForm] = useState({
     nickname: '', numero: '', ruolo: 'ATT', eta: '', altezza: '', peso: '', piede: 'Destro'
   });
-
   const [showSuggestions, setShowSuggestions] = useState(false);
+
   const autocompleteRef = useRef(null);
   const teamsGenerated = useRef({});
 
-  // ─── AUTOCOMPLETE CLICK OUTSIDE ───
+  const showToast = (msg, type = "success") => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 2500);
+  };
+
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (autocompleteRef.current && !autocompleteRef.current.contains(e.target)) {
@@ -146,38 +137,20 @@ export default function App() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const showToast = (msg, type = "success") => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 2500);
-  };
-
-  // ─── FIREBASE REALTIME LISTENERS ───
   useEffect(() => {
     const empty = {};
     MATCH_DAYS.forEach((d) => (empty[d.key] = []));
-
-    const unsub1 = fbListen(`signups/${weekId}`, (data) => {
-      setSignups(data || empty);
-    });
-    const unsub2 = fbListen("playerStats", (data) => {
-      setPlayerStats(data || {});
-    });
+    const unsub1 = fbListen(`signups/${weekId}`, (data) => { setSignups(data || empty); });
+    const unsub2 = fbListen("playerStats", (data) => { setPlayerStats(data || {}); });
     const unsub3 = fbListen("matchHistory", (data) => {
       setMatchHistory(data ? Object.values(data).sort((a, b) => b.id - a.id) : []);
     });
-    const unsub4 = fbListen(`teams/${weekId}`, (data) => {
-      setGeneratedTeams(data || {});
-    });
-    const unsub5 = fbListen("players", (data) => {
-      setPlayers(data || {});
-    });
-
+    const unsub4 = fbListen(`teams/${weekId}`, (data) => { setGeneratedTeams(data || {}); });
+    const unsub5 = fbListen("players", (data) => { setPlayers(data || {}); });
     setLoading(false);
-
     return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); };
   }, [weekId]);
 
-  // ─── SIGNUP HANDLERS ───
   const handleSignup = async (dayKey) => {
     const name = playerName.trim();
     if (!name) return showToast("Scrivi il tuo nome!", "error");
@@ -205,10 +178,8 @@ export default function App() {
     showToast(`${name} rimosso.`);
   };
 
-  // ─── TEAM GENERATION ───
   const generateTeams = async (dayKey) => {
     if (teamsGenerated.current[dayKey]) return;
-    
     const allPlayers = signups[dayKey] || [];
     const playersToUse = allPlayers.slice(0, MAX_PLAYERS);
     if (playersToUse.length < 2) return showToast("Servono almeno 2 giocatori!", "error");
@@ -257,24 +228,18 @@ export default function App() {
 
   const handleDrop = (e, toTeam) => {
     e.preventDefault();
-    const playerName = e.dataTransfer.getData('player');
+    const pName = e.dataTransfer.getData('player');
     const fromTeam = e.dataTransfer.getData('fromTeam');
-    
     if (fromTeam === toTeam || !editedTeams) return;
-    
     const newTeams = { ...editedTeams };
-    const playerObj = newTeams[fromTeam].find(p => p.name === playerName);
-    
-    newTeams[fromTeam] = newTeams[fromTeam].filter(p => p.name !== playerName);
+    const playerObj = newTeams[fromTeam].find(p => p.name === pName);
+    newTeams[fromTeam] = newTeams[fromTeam].filter(p => p.name !== pName);
     newTeams[toTeam] = [...newTeams[toTeam], playerObj];
-    
     newTeams.sumA = newTeams.teamA.reduce((sum, p) => sum + p.presenze, 0);
     newTeams.sumB = newTeams.teamB.reduce((sum, p) => sum + p.presenze, 0);
-    
     setEditedTeams(newTeams);
   };
 
-  // ─── MATCH RESULT RECORDING ───
   const startMatchForm = (dayKey) => {
     const teams = editingTeams ? editedTeams : generatedTeams[dayKey];
     if (!teams) return;
@@ -293,120 +258,66 @@ export default function App() {
     }));
   };
 
- const saveMatchResult = async () => {
-  if (!matchForm) return;
-  const { dayKey, players, scoreA, scoreB, mvp } = matchForm;
-  
-  console.log("DEBUG - matchForm:", matchForm);
-  console.log("DEBUG - mvp:", mvp);
-  
-  if (!mvp || mvp === '') {
-    showToast("Seleziona un MVP!", "error");
-    return;
-  }
-  
-  const winner = scoreA > scoreB ? "A" : scoreB > scoreA ? "B" : "draw";
-
-  const newStats = { ...playerStats };
-  Object.entries(players).forEach(([name, data]) => {
-    if (!data.present) return;
-    const key = name.toLowerCase();
-    const prev = newStats[key] || { name, gamesPlayed: 0, wins: 0, draws: 0, losses: 0, mvpCount: 0 };
-    prev.name = name;
-    prev.gamesPlayed += 1;
-    if (winner === "draw") prev.draws = (prev.draws || 0) + 1;
-    else if (data.team === winner) prev.wins = (prev.wins || 0) + 1;
-    else prev.losses = (prev.losses || 0) + 1;
-    if (name === mvp) prev.mvpCount = (prev.mvpCount || 0) + 1;
-    newStats[key] = prev;
-  });
-
-  const presentPlayers = Object.entries(players).filter(([_, d]) => d.present).map(([n]) => n);
-  const matchId = Date.now();
-  const match = {
-    id: matchId,
-    date: new Date().toISOString(),
-    weekId,
-    day: dayKey,
-    scoreA,
-    scoreB,
-    winner,
-    mvp,
-    players: presentPlayers,
+  const saveMatchResult = async () => {
+    if (!matchForm) return;
+    const { dayKey, players, scoreA, scoreB, mvp } = matchForm;
+    if (!mvp || mvp === '') { showToast("Seleziona un MVP!", "error"); return; }
+    const winner = scoreA > scoreB ? "A" : scoreB > scoreA ? "B" : "draw";
+    const newStats = { ...playerStats };
+    Object.entries(players).forEach(([name, data]) => {
+      if (!data.present) return;
+      const key = name.toLowerCase().replace(/[.#$/\[\]]/g, '_');
+      const prev = newStats[key] || { name, gamesPlayed: 0, wins: 0, draws: 0, losses: 0, mvpCount: 0 };
+      prev.name = name;
+      prev.gamesPlayed += 1;
+      if (winner === "draw") prev.draws = (prev.draws || 0) + 1;
+      else if (data.team === winner) prev.wins = (prev.wins || 0) + 1;
+      else prev.losses = (prev.losses || 0) + 1;
+      if (name === mvp) prev.mvpCount = (prev.mvpCount || 0) + 1;
+      newStats[key] = prev;
+    });
+    const presentPlayers = Object.entries(players).filter(([_, d]) => d.present).map(([n]) => n);
+    const matchId = Date.now();
+    const match = { id: matchId, date: new Date().toISOString(), weekId, day: dayKey, scoreA, scoreB, winner, mvp, players: presentPlayers };
+    try {
+      await fbWrite("playerStats", newStats);
+      await fbWrite(`matchHistory/${matchId}`, match);
+      setPlayerStats(newStats);
+      setMatchHistory([match, ...matchHistory]);
+      setMatchForm(null);
+      setEditingTeams(false);
+      setEditedTeams(null);
+      showToast("Partita registrata! Presenze aggiornate.");
+    } catch (error) {
+      console.error("ERRORE:", error);
+      showToast(`Errore: ${error.message}`, "error");
+    }
   };
 
-  console.log("DEBUG - Tentativo salvataggio:", { newStats, match });
-
-  try {
-    console.log("DEBUG - Scrivendo playerStats...");
-    await fbWrite("playerStats", newStats);
-    
-    console.log("DEBUG - Scrivendo matchHistory...");
-    await fbWrite(`matchHistory/${matchId}`, match);
-    
-    console.log("DEBUG - Aggiornando state locale...");
-    setPlayerStats(newStats);
-    setMatchHistory([match, ...matchHistory]);
-    setMatchForm(null);
-    setEditingTeams(false);
-    setEditedTeams(null);
-    
-    showToast("Partita registrata! Presenze aggiornate.");
-  } catch (error) {
-    console.error("ERRORE COMPLETO:", error);
-    showToast(`Errore: ${error.message}`, "error");
-  }
-};
-
-  // ─── EDIT MATCH (ADMIN) ───
   const startEditingMatch = (match) => {
-    setEditingMatch({
-      ...match,
-      scoreA: match.scoreA || 0,
-      scoreB: match.scoreB || 0,
-      mvp: match.mvp || ''
-    });
+    setEditingMatch({ ...match, scoreA: match.scoreA || 0, scoreB: match.scoreB || 0, mvp: match.mvp || '' });
   };
 
   const saveEditedMatch = async () => {
     if (!editingMatch) return;
-    
-    const { id, scoreA, scoreB, mvp, players: matchPlayers } = editingMatch;
-    
+    const { id, scoreA, scoreB, mvp } = editingMatch;
     if (!mvp) return showToast("Seleziona un MVP!", "error");
-    
     const winner = scoreA > scoreB ? "A" : scoreB > scoreA ? "B" : "draw";
-    
-    const updatedMatch = {
-      ...matchHistory.find(m => m.id === id),
-      scoreA,
-      scoreB,
-      winner,
-      mvp
-    };
-    
+    const updatedMatch = { ...matchHistory.find(m => m.id === id), scoreA, scoreB, winner, mvp };
     await fbWrite(`matchHistory/${id}`, updatedMatch);
-    
     setMatchHistory(matchHistory.map(m => m.id === id ? updatedMatch : m));
     setEditingMatch(null);
     showToast("Partita aggiornata!");
   };
 
-  // ─── PLAYER PROFILES ───
   const handleSaveProfile = async () => {
     const { nickname, numero, ruolo, eta, altezza, peso, piede } = profileForm;
     if (!nickname || !numero) return showToast("Compila nome e numero!", "error");
-    
     await fbWrite(`players/${nickname}`, {
-      nickname,
-      numero: parseInt(numero),
-      ruolo,
-      eta: parseInt(eta) || 0,
-      altezza: parseInt(altezza) || 0,
-      peso: parseInt(peso) || 0,
-      piede
+      nickname, numero: parseInt(numero), ruolo,
+      eta: parseInt(eta) || 0, altezza: parseInt(altezza) || 0,
+      peso: parseInt(peso) || 0, piede
     });
-    
     setShowProfileModal(false);
     setProfileForm({ nickname: '', numero: '', ruolo: 'ATT', eta: '', altezza: '', peso: '', piede: 'Destro' });
     showToast("Profilo salvato!");
@@ -418,21 +329,15 @@ export default function App() {
     showToast("Profilo eliminato!");
   };
 
-  // ─── EDIT PLAYER STATS (ADMIN) ───
   const startEditingPlayerStats = (player) => {
     const stats = playerStats[player.nickname.toLowerCase()] || { gamesPlayed: 0, wins: 0, draws: 0, losses: 0, mvpCount: 0 };
-    setEditingPlayer({
-      nickname: player.nickname,
-      ...stats
-    });
+    setEditingPlayer({ nickname: player.nickname, ...stats });
   };
 
   const saveEditedPlayerStats = async () => {
     if (!editingPlayer) return;
-    
     const { nickname, gamesPlayed, wins, draws, losses, mvpCount } = editingPlayer;
-    const key = nickname.toLowerCase();
-    
+    const key = nickname.toLowerCase().replace(/[.#$/\[\]]/g, '_');
     const updatedStats = {
       name: nickname,
       gamesPlayed: parseInt(gamesPlayed) || 0,
@@ -441,14 +346,12 @@ export default function App() {
       losses: parseInt(losses) || 0,
       mvpCount: parseInt(mvpCount) || 0
     };
-    
     await fbWrite(`playerStats/${key}`, updatedStats);
     setPlayerStats({ ...playerStats, [key]: updatedStats });
     setEditingPlayer(null);
     showToast("Statistiche aggiornate!");
   };
 
-  // ─── ADMIN ───
   const handleTitleClick = () => {
     const n = adminClicks + 1;
     setAdminClicks(n);
@@ -503,27 +406,20 @@ export default function App() {
           <svg width="140" height="164" viewBox="0 0 240 280" xmlns="http://www.w3.org/2000/svg">
             <defs>
               <linearGradient id="shieldGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#1a3a2a" />
-                <stop offset="100%" stopColor="#0a1a12" />
+                <stop offset="0%" stopColor="#1a3a2a" /><stop offset="100%" stopColor="#0a1a12" />
               </linearGradient>
               <linearGradient id="goldGrad" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stopColor="#fbbf24" />
-                <stop offset="50%" stopColor="#eab308" />
-                <stop offset="100%" stopColor="#ca8a04" />
+                <stop offset="0%" stopColor="#fbbf24" /><stop offset="50%" stopColor="#eab308" /><stop offset="100%" stopColor="#ca8a04" />
               </linearGradient>
               <linearGradient id="goldStroke" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#fde68a" />
-                <stop offset="100%" stopColor="#b45309" />
+                <stop offset="0%" stopColor="#fde68a" /><stop offset="100%" stopColor="#b45309" />
               </linearGradient>
               <linearGradient id="silverGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#e2e8f0" />
-                <stop offset="100%" stopColor="#94a3b8" />
+                <stop offset="0%" stopColor="#e2e8f0" /><stop offset="100%" stopColor="#94a3b8" />
               </linearGradient>
             </defs>
-            <path d="M120 8 L218 55 L218 160 Q218 230 120 272 Q22 230 22 160 L22 55 Z"
-              fill="url(#shieldGrad)" stroke="url(#goldStroke)" strokeWidth="4" />
-            <path d="M120 20 L208 62 L208 158 Q208 222 120 260 Q32 222 32 158 L32 62 Z"
-              fill="none" stroke="url(#goldGrad)" strokeWidth="1.5" opacity="0.4" />
+            <path d="M120 8 L218 55 L218 160 Q218 230 120 272 Q22 230 22 160 L22 55 Z" fill="url(#shieldGrad)" stroke="url(#goldStroke)" strokeWidth="4" />
+            <path d="M120 20 L208 62 L208 158 Q208 222 120 260 Q32 222 32 158 L32 62 Z" fill="none" stroke="url(#goldGrad)" strokeWidth="1.5" opacity="0.4" />
             <path d="M55 58 Q120 35 185 58" stroke="url(#goldGrad)" strokeWidth="2" fill="none" />
             <path d="M65 66 Q120 46 175 66" stroke="url(#goldGrad)" strokeWidth="1" fill="none" opacity="0.4" />
             <polygon points="90,55 93,47 96,55 89,50 97,50" fill="url(#goldGrad)" />
@@ -563,7 +459,9 @@ export default function App() {
           <p style={{ textAlign: "center", color: "#64748b", fontSize: 13, marginBottom: 16 }}>
             ⏰ Partite alle <strong style={{ color: "#e2e8f0" }}>{MATCH_HOUR}:{String(MATCH_MINUTE).padStart(2, "0")}</strong> — Lista si chiude alle <strong style={{ color: "#eab308" }}>{MATCH_HOUR}:{String(MATCH_MINUTE).padStart(2, "0")}</strong> del giorno
           </p>
-         <div style={S.inputSection}>
+
+          {/* INPUT CON AUTOCOMPLETE */}
+          <div style={S.inputSection}>
             <div style={{ ...S.inputWrap, position: 'relative' }} ref={autocompleteRef}>
               <input
                 type="text"
@@ -571,7 +469,6 @@ export default function App() {
                 value={playerName}
                 onChange={e => {
                   const val = e.target.value;
-                  // Blocca caratteri speciali vietati da Firebase
                   if (/[.#$\/\[\]]/.test(val)) {
                     showToast("❌ Caratteri non permessi: . # $ / [ ]", "error");
                     return;
@@ -589,7 +486,6 @@ export default function App() {
               {/* DROPDOWN AUTOCOMPLETE */}
               {showSuggestions && (() => {
                 const query = playerName.trim().toLowerCase();
-                // Raccoglie nomi da: profili carriere + iscrizioni settimana corrente
                 const fromProfiles = Object.values(players).map(p => p.nickname || p.key).filter(Boolean);
                 const fromSignups = Object.values(signups).flat();
                 const allNames = [...new Set([...fromProfiles, ...fromSignups])];
@@ -597,44 +493,14 @@ export default function App() {
                   .filter(n => n.toLowerCase().includes(query) && n.toLowerCase() !== query)
                   .sort((a, b) => a.localeCompare(b))
                   .slice(0, 6);
-
                 if (suggestions.length === 0) return null;
-
                 return (
-                  <div style={{
-                    position: 'absolute',
-                    top: '100%',
-                    left: 0,
-                    right: 0,
-                    marginTop: 4,
-                    background: '#1a1a2e',
-                    border: '1px solid rgba(22,163,74,0.4)',
-                    borderRadius: 12,
-                    overflow: 'hidden',
-                    zIndex: 100,
-                    boxShadow: '0 8px 24px rgba(0,0,0,0.5)'
-                  }}>
+                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, background: '#1a1a2e', border: '1px solid rgba(22,163,74,0.4)', borderRadius: 12, overflow: 'hidden', zIndex: 100, boxShadow: '0 8px 24px rgba(0,0,0,0.5)' }}>
                     {suggestions.map((name, i) => (
                       <div
                         key={name}
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          setPlayerName(name);
-                          setShowSuggestions(false);
-                        }}
-                        style={{
-                          padding: '12px 18px',
-                          cursor: 'pointer',
-                          fontSize: 15,
-                          fontWeight: 600,
-                          color: '#e2e8f0',
-                          borderTop: i > 0 ? '1px solid rgba(255,255,255,0.04)' : 'none',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 10,
-                          background: 'transparent',
-                          transition: 'background 0.15s'
-                        }}
+                        onMouseDown={(e) => { e.preventDefault(); setPlayerName(name); setShowSuggestions(false); }}
+                        style={{ padding: '12px 18px', cursor: 'pointer', fontSize: 15, fontWeight: 600, color: '#e2e8f0', borderTop: i > 0 ? '1px solid rgba(255,255,255,0.04)' : 'none', display: 'flex', alignItems: 'center', gap: 10, background: 'transparent', transition: 'background 0.15s' }}
                         onMouseEnter={e => e.currentTarget.style.background = 'rgba(22,163,74,0.12)'}
                         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                       >
@@ -657,7 +523,6 @@ export default function App() {
               const isFull = playersArr.length >= MAX_TOTAL;
               const weekDates = getWeekDates();
               const dateStr = formatDate(weekDates[day.key]);
-
               return (
                 <div key={day.key} style={{ ...S.dayCard, opacity: locked ? 0.7 : 1 }}>
                   <div style={S.dayHead}>
@@ -669,21 +534,18 @@ export default function App() {
                       {titolari.length}/{MAX_PLAYERS}
                     </span>
                   </div>
-
                   {locked && !adminMode && (
                     <div style={{ padding: "6px 16px", background: "rgba(220,38,38,0.1)", borderBottom: "1px solid rgba(220,38,38,0.2)" }}>
                       <span style={{ fontSize: 12, color: "#f87171", fontFamily: "'Oswald', sans-serif", letterSpacing: 1 }}>🔒 LISTA CHIUSA</span>
                     </div>
                   )}
-
                   <div style={S.playerList}>
                     {titolari.map((p, i) => (
                       <div key={i} style={{ ...S.playerRow, borderLeft: i < 5 ? "3px solid rgba(22,163,74,0.5)" : "3px solid rgba(234,179,8,0.5)" }}
                         onClick={() => (adminMode || p.toLowerCase() === playerName.trim().toLowerCase()) && handleRemove(day.key, p)}>
                         <span style={S.playerNum}>{i + 1}</span>
                         <span style={S.playerNameText}>{p}</span>
-                        {(adminMode || p.toLowerCase() === playerName.trim().toLowerCase()) &&
-                          <span style={S.removeX}>✕</span>}
+                        {(adminMode || p.toLowerCase() === playerName.trim().toLowerCase()) && <span style={S.removeX}>✕</span>}
                       </div>
                     ))}
                     {riserve.length > 0 && (
@@ -696,13 +558,11 @@ export default function App() {
                         onClick={() => (adminMode || p.toLowerCase() === playerName.trim().toLowerCase()) && handleRemove(day.key, p)}>
                         <span style={{ ...S.playerNum, color: "#eab308" }}>R{i + 1}</span>
                         <span style={S.playerNameText}>{p}</span>
-                        {(adminMode || p.toLowerCase() === playerName.trim().toLowerCase()) &&
-                          <span style={S.removeX}>✕</span>}
+                        {(adminMode || p.toLowerCase() === playerName.trim().toLowerCase()) && <span style={S.removeX}>✕</span>}
                       </div>
                     ))}
                     {playersArr.length === 0 && <p style={S.emptyMsg}>Nessun iscritto</p>}
                   </div>
-
                   <button onClick={() => handleSignup(day.key)} disabled={isFull || (locked && !adminMode)}
                     style={{ ...S.signBtn, ...(isFull || (locked && !adminMode) ? S.signBtnFull : {}), ...((locked && !adminMode) ? { background: "rgba(220,38,38,0.1)", color: "#f87171" } : {}) }}>
                     {(locked && !adminMode) ? "🔒 CHIUSA" : isFull ? "COMPLETO ✓" : titolari.length >= MAX_PLAYERS ? `RISERVA (${MAX_TOTAL - playersArr.length} posti)` : `MI ISCRIVO (${MAX_PLAYERS - titolari.length} posti)`}
@@ -719,6 +579,7 @@ export default function App() {
             <p style={{ ...S.footerSub, marginTop: 12, color: '#f59e0b' }}>⚠️ <strong>Usa sempre lo stesso nickname</strong> per non perdere le tue statistiche.</p>
             <p style={{ ...S.footerSub, color: '#f87171' }}>🚫 <strong>No caratteri speciali</strong> nel nome: vietati <code style={{ background: 'rgba(255,255,255,0.08)', padding: '1px 6px', borderRadius: 4 }}>. # $ / [ ]</code></p>
           </div>
+        </div>
       )}
 
       {/* ═══ TAB: SQUADRE ═══ */}
@@ -757,44 +618,28 @@ export default function App() {
                   </div>
                 )}
                 <div style={S.teamVsRow}>
-                  <div 
-                    style={S.teamBox}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => editingTeams && handleDrop(e, 'teamA')}
-                  >
+                  <div style={S.teamBox} onDragOver={(e) => e.preventDefault()} onDrop={(e) => editingTeams && handleDrop(e, 'teamA')}>
                     <div style={{ ...S.teamHeader, background: "linear-gradient(135deg, rgba(22,163,74,0.2), rgba(22,163,74,0.05))" }}>
                       <span style={S.teamTitle}>🟢 SQUADRA A</span>
                       <span style={S.teamPower}>{t.sumA} presenze</span>
                     </div>
                     {t.teamA.map((p, i) => (
-                      <div 
-                        key={i} 
-                        style={{ ...S.teamPlayer, cursor: editingTeams ? 'move' : 'default' }}
-                        draggable={editingTeams}
-                        onDragStart={(e) => editingTeams && handleDragStart(e, p, 'teamA')}
-                      >
+                      <div key={i} style={{ ...S.teamPlayer, cursor: editingTeams ? 'move' : 'default' }}
+                        draggable={editingTeams} onDragStart={(e) => editingTeams && handleDragStart(e, p, 'teamA')}>
                         <span style={{ fontSize: 15, fontWeight: 600 }}>{p.name}</span>
                         <span style={{ fontSize: 12, color: "#94a3b8", fontFamily: "'Oswald', sans-serif" }}>{p.presenze} pres.</span>
                       </div>
                     ))}
                   </div>
                   <div style={S.vsCircle}><span style={{ fontSize: 20, fontWeight: 800, fontFamily: "'Oswald', sans-serif", color: "#64748b" }}>VS</span></div>
-                  <div 
-                    style={S.teamBox}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => editingTeams && handleDrop(e, 'teamB')}
-                  >
+                  <div style={S.teamBox} onDragOver={(e) => e.preventDefault()} onDrop={(e) => editingTeams && handleDrop(e, 'teamB')}>
                     <div style={{ ...S.teamHeader, background: "linear-gradient(135deg, rgba(234,179,8,0.2), rgba(234,179,8,0.05))" }}>
                       <span style={S.teamTitle}>🟡 SQUADRA B</span>
                       <span style={S.teamPower}>{t.sumB} presenze</span>
                     </div>
                     {t.teamB.map((p, i) => (
-                      <div 
-                        key={i} 
-                        style={{ ...S.teamPlayer, cursor: editingTeams ? 'move' : 'default' }}
-                        draggable={editingTeams}
-                        onDragStart={(e) => editingTeams && handleDragStart(e, p, 'teamB')}
-                      >
+                      <div key={i} style={{ ...S.teamPlayer, cursor: editingTeams ? 'move' : 'default' }}
+                        draggable={editingTeams} onDragStart={(e) => editingTeams && handleDragStart(e, p, 'teamB')}>
                         <span style={{ fontSize: 15, fontWeight: 600 }}>{p.name}</span>
                         <span style={{ fontSize: 12, color: "#94a3b8", fontFamily: "'Oswald', sans-serif" }}>{p.presenze} pres.</span>
                       </div>
@@ -804,10 +649,7 @@ export default function App() {
                 <div style={S.balanceBar}>
                   <div style={{ ...S.balanceFill, width: `${t.sumA + t.sumB > 0 ? (t.sumA / (t.sumA + t.sumB)) * 100 : 50}%` }} />
                 </div>
-                <p style={S.balanceText}>
-                  Differenza: {Math.abs(t.sumA - t.sumB)} presenze
-                  {Math.abs(t.sumA - t.sumB) <= 2 ? " — Ben bilanciato! ⚖️" : ""}
-                </p>
+                <p style={S.balanceText}>Differenza: {Math.abs(t.sumA - t.sumB)} presenze{Math.abs(t.sumA - t.sumB) <= 2 ? " — Ben bilanciato! ⚖️" : ""}</p>
                 {!editingTeams && (
                   <div style={S.teamActions}>
                     <button onClick={() => shuffleTeams(selectedDay)} style={S.actionBtn}>🔄 RIMESCOLA</button>
@@ -841,21 +683,16 @@ export default function App() {
                     </div>
                   </div>
                 </div>
-
                 <div style={{ marginBottom: 20 }}>
                   <label style={{ display: 'block', fontFamily: "'Oswald', sans-serif", fontSize: 14, letterSpacing: 1.5, color: "#eab308", marginBottom: 8 }}>⭐ MVP DELLA PARTITA</label>
-                  <select 
-                    value={matchForm.mvp} 
-                    onChange={(e) => setMatchForm(p => ({ ...p, mvp: e.target.value }))}
-                    style={{ width: '100%', padding: '12px', background: '#1a202c', border: '2px solid #eab308', borderRadius: 10, color: '#e2e8f0', fontFamily: "'Oswald', sans-serif", fontSize: 15, cursor: 'pointer' }}
-                  >
+                  <select value={matchForm.mvp} onChange={(e) => setMatchForm(p => ({ ...p, mvp: e.target.value }))}
+                    style={{ width: '100%', padding: '12px', background: '#1a202c', border: '2px solid #eab308', borderRadius: 10, color: '#e2e8f0', fontFamily: "'Oswald', sans-serif", fontSize: 15, cursor: 'pointer' }}>
                     <option value="">-- Seleziona MVP --</option>
                     {Object.entries(matchForm.players).filter(([_, d]) => d.present).map(([name]) => (
                       <option key={name} value={name}>{name}</option>
                     ))}
                   </select>
                 </div>
-
                 <div style={{ marginBottom: 20 }}>
                   <div style={S.formHeader}>
                     <span style={{ flex: 2 }}>Giocatore</span>
@@ -881,176 +718,125 @@ export default function App() {
         </div>
       )}
 
-{/* ═══ TAB: CARRIERE ═══ */}
-{tab === "careers" && (
-  <div style={S.content}>
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-      <h2 style={{ fontFamily: "'Oswald', sans-serif", fontSize: 28, letterSpacing: 3, color: "#eab308", margin: 0 }}>CARRIERE</h2>
-      <button onClick={() => setShowProfileModal(true)} style={{ ...S.actionBtn, ...S.actionPrimary }}>+ CREA PROFILO</button>
-    </div>
+      {/* ═══ TAB: CARRIERE ═══ */}
+      {tab === "careers" && (
+        <div style={S.content}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+            <h2 style={{ fontFamily: "'Oswald', sans-serif", fontSize: 28, letterSpacing: 3, color: "#eab308", margin: 0 }}>CARRIERE</h2>
+            <button onClick={() => setShowProfileModal(true)} style={{ ...S.actionBtn, ...S.actionPrimary }}>+ CREA PROFILO</button>
+          </div>
+          <div style={{ display: 'flex', gap: 16, overflowX: 'auto', padding: '0 0 20px', WebkitOverflowScrolling: 'touch' }}>
+            {Object.entries(players)
+              .map(([key, data]) => {
+                const nick = data.nickname || key;
+                const statsKey = Object.keys(playerStats).find(k => k.toLowerCase() === nick.toLowerCase() || k.toLowerCase() === key.toLowerCase());
+                const stats = statsKey ? playerStats[statsKey] : null;
+                return { nickname: nick, ...data, presences: stats?.gamesPlayed || 0, wins: stats?.wins || 0, draws: stats?.draws || 0, losses: stats?.losses || 0, mvps: stats?.mvpCount || 0 };
+              })
+              .sort((a, b) => b.presences - a.presences)
+              .map(p => {
+                const tier = getTierInfo(p.presences);
+                const winRate = p.presences > 0 ? Math.round((p.wins / p.presences) * 100) : 0;
+                return (
+                  <div key={p.nickname}
+                    style={{ width: 190, borderRadius: 14, overflow: 'hidden', border: `2px solid ${tier.color}`, background: '#0d1117', flexShrink: 0, position: 'relative', boxShadow: '0 8px 24px rgba(0,0,0,0.4)', cursor: adminMode ? 'pointer' : 'default' }}
+                    onClick={() => adminMode && startEditingPlayerStats(p)}>
+                    {adminMode && (
+                      <button onClick={(e) => { e.stopPropagation(); handleDeletePlayer(p.nickname); }}
+                        style={{ position: 'absolute', top: 6, right: 6, background: '#dc2626', border: 'none', color: '#fff', width: 24, height: 24, borderRadius: '50%', cursor: 'pointer', fontSize: 13, fontWeight: 'bold', zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                    )}
+                    <div style={{ backgroundImage: tier.gradient, position: 'relative', height: 200, overflow: 'hidden' }}>
+                      <div style={{ position: 'absolute', inset: 0, backgroundImage: 'repeating-linear-gradient(180deg, transparent, transparent 2px, rgba(255,255,255,0.03) 2px, rgba(255,255,255,0.03) 4px)', pointerEvents: 'none' }} />
+                      <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', width: 50, height: 16, borderRadius: '0 0 25px 25px', background: 'rgba(0,0,0,0.25)' }} />
+                      <div style={{ position: 'absolute', top: 14, left: 0, width: '30%', height: 2, background: 'rgba(0,0,0,0.12)' }} />
+                      <div style={{ position: 'absolute', top: 14, right: 0, width: '30%', height: 2, background: 'rgba(0,0,0,0.12)' }} />
+                      <div style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(0,0,0,0.4)', borderRadius: 6, padding: '2px 8px', fontSize: 10, fontFamily: "'Oswald',sans-serif", letterSpacing: 2, color: '#fff', zIndex: 2 }}>{p.ruolo || 'ATT'}</div>
+                      <div style={{ position: 'absolute', top: 8, left: 8, background: 'rgba(0,0,0,0.4)', borderRadius: 6, padding: '2px 8px', fontSize: 8, fontFamily: "'Oswald',sans-serif", letterSpacing: 2, color: 'rgba(255,255,255,0.7)', zIndex: 2 }}>{tier.name}</div>
+                      <div style={{ position: 'absolute', top: 30, left: 0, right: 0, textAlign: 'center', zIndex: 1 }}>
+                        <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: p.nickname.length > 10 ? 13 : 17, fontWeight: 800, letterSpacing: 3, color: '#fff', textTransform: 'uppercase', textShadow: '0 2px 4px rgba(0,0,0,0.3)', padding: '0 8px', wordBreak: 'break-word', lineHeight: 1.2 }}>{p.nickname}</div>
+                      </div>
+                      <div style={{ position: 'absolute', top: 55, left: 0, right: 0, textAlign: 'center', zIndex: 1 }}>
+                        <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 74, fontWeight: 800, color: '#fff', lineHeight: 1, textShadow: '0 3px 8px rgba(0,0,0,0.3)', letterSpacing: 4 }}>{p.numero || '?'}</div>
+                      </div>
+                      <div style={{ position: 'absolute', bottom: 8, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 4, zIndex: 1, flexWrap: 'wrap', padding: '0 6px' }}>
+                        {p.eta > 0 && <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.6)', fontFamily: "'Oswald',sans-serif", background: 'rgba(0,0,0,0.25)', borderRadius: 4, padding: '1px 5px' }}>{p.eta}y</span>}
+                        {p.altezza > 0 && <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.6)', fontFamily: "'Oswald',sans-serif", background: 'rgba(0,0,0,0.25)', borderRadius: 4, padding: '1px 5px' }}>{p.altezza}cm</span>}
+                        {p.peso > 0 && <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.6)', fontFamily: "'Oswald',sans-serif", background: 'rgba(0,0,0,0.25)', borderRadius: 4, padding: '1px 5px' }}>{p.peso}kg</span>}
+                        {p.piede && <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.6)', fontFamily: "'Oswald',sans-serif", background: 'rgba(0,0,0,0.25)', borderRadius: 4, padding: '1px 5px' }}>🦶{p.piede[0]}</span>}
+                      </div>
+                    </div>
+                    <div style={{ padding: '8px 6px 4px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 3 }}>
+                      <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 5, padding: '3px 0', textAlign: 'center' }}>
+                        <span style={{ fontFamily: "'Oswald',sans-serif", fontSize: 14, fontWeight: 700, color: '#4ade80', display: 'block' }}>{p.presences}</span>
+                        <span style={{ fontSize: 7, fontFamily: "'Oswald',sans-serif", letterSpacing: 1, color: '#64748b' }}>PRE</span>
+                      </div>
+                      <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 5, padding: '3px 0', textAlign: 'center' }}>
+                        <span style={{ fontFamily: "'Oswald',sans-serif", fontSize: 14, fontWeight: 700, color: '#eab308', display: 'block' }}>{p.mvps}</span>
+                        <span style={{ fontSize: 7, fontFamily: "'Oswald',sans-serif", letterSpacing: 1, color: '#64748b' }}>MVP</span>
+                      </div>
+                      <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 5, padding: '3px 0', textAlign: 'center' }}>
+                        <span style={{ fontFamily: "'Oswald',sans-serif", fontSize: 14, fontWeight: 700, color: '#16a34a', display: 'block' }}>{p.wins}</span>
+                        <span style={{ fontSize: 7, fontFamily: "'Oswald',sans-serif", letterSpacing: 1, color: '#64748b' }}>VIT</span>
+                      </div>
+                      <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 5, padding: '3px 0', textAlign: 'center' }}>
+                        <span style={{ fontFamily: "'Oswald',sans-serif", fontSize: 14, fontWeight: 700, color: '#f87171', display: 'block' }}>{p.losses}</span>
+                        <span style={{ fontSize: 7, fontFamily: "'Oswald',sans-serif", letterSpacing: 1, color: '#64748b' }}>SCO</span>
+                      </div>
+                    </div>
+                    <div style={{ padding: '0 6px 8px' }}>
+                      <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 3, height: 5, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', borderRadius: 3, background: 'linear-gradient(90deg, #16a34a, #4ade80)', width: `${winRate}%` }} />
+                      </div>
+                      <div style={{ textAlign: 'center', fontSize: 8, color: '#64748b', fontFamily: "'Oswald',sans-serif", marginTop: 2, letterSpacing: 1 }}>{winRate}% WIN</div>
+                    </div>
+                    {adminMode && <div style={{ textAlign: 'center', fontSize: 9, color: '#eab308', padding: '0 0 6px', fontFamily: "'Oswald',sans-serif" }}>Click per edit stats</div>}
+                  </div>
+                );
+              })}
+          </div>
 
-    <div style={{ display: 'flex', gap: 16, overflowX: 'auto', padding: '0 0 20px', WebkitOverflowScrolling: 'touch' }}>
-      {Object.entries(players)
-        .map(([key, data]) => {
-          const nick = data.nickname || key;
-          const statsKey = Object.keys(playerStats).find(k => k.toLowerCase() === nick.toLowerCase() || k.toLowerCase() === key.toLowerCase());
-          const stats = statsKey ? playerStats[statsKey] : null;
-          return {
-            nickname: nick,
-            ...data,
-            presences: stats?.gamesPlayed || 0,
-            wins: stats?.wins || 0,
-            draws: stats?.draws || 0,
-            losses: stats?.losses || 0,
-            mvps: stats?.mvpCount || 0
-          };
-        })
-        .sort((a, b) => b.presences - a.presences)
-        .map(p => {
-          const tier = getTierInfo(p.presences);
-          const winRate = p.presences > 0 ? Math.round((p.wins / p.presences) * 100) : 0;
-          return (
-            <div 
-              key={p.nickname} 
-              style={{ width: 190, borderRadius: 14, overflow: 'hidden', border: `2px solid ${tier.color}`, background: '#0d1117', flexShrink: 0, position: 'relative', boxShadow: '0 8px 24px rgba(0,0,0,0.4)', cursor: adminMode ? 'pointer' : 'default' }}
-              onClick={() => adminMode && startEditingPlayerStats(p)}
-            >
-              {/* X rossa admin */}
-              {adminMode && (
-                <button onClick={(e) => { e.stopPropagation(); handleDeletePlayer(p.nickname); }} style={{ position: 'absolute', top: 6, right: 6, background: '#dc2626', border: 'none', color: '#fff', width: 24, height: 24, borderRadius: '50%', cursor: 'pointer', fontSize: 13, fontWeight: 'bold', zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
-              )}
-
-              {/* ── MAGLIA (retro) ── */}
-              <div style={{ backgroundImage: tier.gradient, position: 'relative', height: 200, overflow: 'hidden' }}>
-                {/* Texture tessuto */}
-                <div style={{ position: 'absolute', inset: 0, backgroundImage: 'repeating-linear-gradient(180deg, transparent, transparent 2px, rgba(255,255,255,0.03) 2px, rgba(255,255,255,0.03) 4px)', pointerEvents: 'none' }} />
-                {/* Colletto */}
-                <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', width: 50, height: 16, borderRadius: '0 0 25px 25px', background: 'rgba(0,0,0,0.25)' }} />
-                {/* Cuciture spalle */}
-                <div style={{ position: 'absolute', top: 14, left: 0, width: '30%', height: 2, background: 'rgba(0,0,0,0.12)' }} />
-                <div style={{ position: 'absolute', top: 14, right: 0, width: '30%', height: 2, background: 'rgba(0,0,0,0.12)' }} />
-                {/* Cucitura centrale schiena */}
-                <div style={{ position: 'absolute', top: 16, left: '50%', width: 1, height: '100%', background: 'rgba(0,0,0,0.05)' }} />
-
-                {/* Ruolo in alto a destra */}
-                <div style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(0,0,0,0.4)', borderRadius: 6, padding: '2px 8px', fontSize: 10, fontFamily: "'Oswald',sans-serif", letterSpacing: 2, color: '#fff', zIndex: 2 }}>{p.ruolo || 'ATT'}</div>
-                {/* Tier in alto a sinistra */}
-                <div style={{ position: 'absolute', top: 8, left: 8, background: 'rgba(0,0,0,0.4)', borderRadius: 6, padding: '2px 8px', fontSize: 8, fontFamily: "'Oswald',sans-serif", letterSpacing: 2, color: 'rgba(255,255,255,0.7)', zIndex: 2 }}>{tier.name}</div>
-
-                {/* NOME stampato sulla maglia */}
-                <div style={{ position: 'absolute', top: 30, left: 0, right: 0, textAlign: 'center', zIndex: 1 }}>
-                  <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: p.nickname.length > 10 ? 13 : 17, fontWeight: 800, letterSpacing: 3, color: '#fff', textTransform: 'uppercase', textShadow: '0 2px 4px rgba(0,0,0,0.3)', padding: '0 8px', wordBreak: 'break-word', lineHeight: 1.2 }}>{p.nickname}</div>
-                </div>
-
-                {/* NUMERO GRANDE */}
-                <div style={{ position: 'absolute', top: 55, left: 0, right: 0, textAlign: 'center', zIndex: 1 }}>
-                  <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 74, fontWeight: 800, color: '#fff', lineHeight: 1, textShadow: '0 3px 8px rgba(0,0,0,0.3), 2px 2px 0 rgba(0,0,0,0.1)', letterSpacing: 4 }}>{p.numero || '?'}</div>
-                </div>
-
-                {/* Info fisiche in basso sulla maglia */}
-                <div style={{ position: 'absolute', bottom: 8, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 4, zIndex: 1, flexWrap: 'wrap', padding: '0 6px' }}>
-                  {p.eta > 0 && <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.6)', fontFamily: "'Oswald',sans-serif", letterSpacing: 1, background: 'rgba(0,0,0,0.25)', borderRadius: 4, padding: '1px 5px' }}>{p.eta}y</span>}
-                  {p.altezza > 0 && <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.6)', fontFamily: "'Oswald',sans-serif", letterSpacing: 1, background: 'rgba(0,0,0,0.25)', borderRadius: 4, padding: '1px 5px' }}>{p.altezza}cm</span>}
-                  {p.peso > 0 && <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.6)', fontFamily: "'Oswald',sans-serif", letterSpacing: 1, background: 'rgba(0,0,0,0.25)', borderRadius: 4, padding: '1px 5px' }}>{p.peso}kg</span>}
-                  {p.piede && <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.6)', fontFamily: "'Oswald',sans-serif", letterSpacing: 1, background: 'rgba(0,0,0,0.25)', borderRadius: 4, padding: '1px 5px' }}>🦶{p.piede[0]}</span>}
+          {showProfileModal && (
+            <div style={S.overlay}>
+              <div style={S.modal}>
+                <h3 style={S.modalTitle}>Crea Profilo Giocatore</h3>
+                <input type="text" placeholder="Nickname" value={profileForm.nickname} onChange={(e) => setProfileForm({...profileForm, nickname: e.target.value})} style={{ ...S.input, marginBottom: 12, textAlign: 'left' }} />
+                <input type="number" placeholder="Numero Maglia" value={profileForm.numero} onChange={(e) => setProfileForm({...profileForm, numero: e.target.value})} style={{ ...S.input, marginBottom: 12, textAlign: 'left' }} />
+                <select value={profileForm.ruolo} onChange={(e) => setProfileForm({...profileForm, ruolo: e.target.value})} style={{ ...S.input, marginBottom: 12, textAlign: 'left' }}>
+                  <option>ATT</option><option>CEN</option><option>DIF</option><option>POR</option>
+                </select>
+                <input type="number" placeholder="Età" value={profileForm.eta} onChange={(e) => setProfileForm({...profileForm, eta: e.target.value})} style={{ ...S.input, marginBottom: 12, textAlign: 'left' }} />
+                <input type="number" placeholder="Altezza (cm)" value={profileForm.altezza} onChange={(e) => setProfileForm({...profileForm, altezza: e.target.value})} style={{ ...S.input, marginBottom: 12, textAlign: 'left' }} />
+                <input type="number" placeholder="Peso (kg)" value={profileForm.peso} onChange={(e) => setProfileForm({...profileForm, peso: e.target.value})} style={{ ...S.input, marginBottom: 12, textAlign: 'left' }} />
+                <select value={profileForm.piede} onChange={(e) => setProfileForm({...profileForm, piede: e.target.value})} style={{ ...S.input, marginBottom: 20, textAlign: 'left' }}>
+                  <option>Destro</option><option>Sinistro</option><option>Ambidestro</option>
+                </select>
+                <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+                  <button style={S.cancelBtn} onClick={() => { setShowProfileModal(false); setProfileForm({ nickname: '', numero: '', ruolo: 'ATT', eta: '', altezza: '', peso: '', piede: 'Destro' }); }}>ANNULLA</button>
+                  <button style={S.saveBtn} onClick={handleSaveProfile}>💾 SALVA</button>
                 </div>
               </div>
-
-              {/* ── STATS SOTTO LA MAGLIA ── */}
-              <div style={{ padding: '8px 6px 4px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 3 }}>
-                <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 5, padding: '3px 0', textAlign: 'center' }}>
-                  <span style={{ fontFamily: "'Oswald',sans-serif", fontSize: 14, fontWeight: 700, color: '#4ade80', display: 'block' }}>{p.presences}</span>
-                  <span style={{ fontSize: 7, fontFamily: "'Oswald',sans-serif", letterSpacing: 1, color: '#64748b' }}>PRE</span>
-                </div>
-                <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 5, padding: '3px 0', textAlign: 'center' }}>
-                  <span style={{ fontFamily: "'Oswald',sans-serif", fontSize: 14, fontWeight: 700, color: '#eab308', display: 'block' }}>{p.mvps}</span>
-                  <span style={{ fontSize: 7, fontFamily: "'Oswald',sans-serif", letterSpacing: 1, color: '#64748b' }}>MVP</span>
-                </div>
-                <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 5, padding: '3px 0', textAlign: 'center' }}>
-                  <span style={{ fontFamily: "'Oswald',sans-serif", fontSize: 14, fontWeight: 700, color: '#16a34a', display: 'block' }}>{p.wins}</span>
-                  <span style={{ fontSize: 7, fontFamily: "'Oswald',sans-serif", letterSpacing: 1, color: '#64748b' }}>VIT</span>
-                </div>
-                <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 5, padding: '3px 0', textAlign: 'center' }}>
-                  <span style={{ fontFamily: "'Oswald',sans-serif", fontSize: 14, fontWeight: 700, color: '#f87171', display: 'block' }}>{p.losses}</span>
-                  <span style={{ fontSize: 7, fontFamily: "'Oswald',sans-serif", letterSpacing: 1, color: '#64748b' }}>SCO</span>
-                </div>
-              </div>
-              {/* WIN RATE */}
-              <div style={{ padding: '0 6px 8px' }}>
-                <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 3, height: 5, overflow: 'hidden' }}>
-                  <div style={{ height: '100%', borderRadius: 3, background: 'linear-gradient(90deg, #16a34a, #4ade80)', width: `${winRate}%` }} />
-                </div>
-                <div style={{ textAlign: 'center', fontSize: 8, color: '#64748b', fontFamily: "'Oswald',sans-serif", marginTop: 2, letterSpacing: 1 }}>{winRate}% WIN</div>
-              </div>
-              {adminMode && <div style={{ textAlign: 'center', fontSize: 9, color: '#eab308', padding: '0 0 6px', fontFamily: "'Oswald',sans-serif" }}>Click per edit stats</div>}
             </div>
-          );
-        })}
-    </div>
+          )}
 
-    {/* MODAL CREA PROFILO */}
-    {showProfileModal && (
-      <div style={S.overlay}>
-        <div style={S.modal}>
-          <h3 style={S.modalTitle}>Crea Profilo Giocatore</h3>
-          <input type="text" placeholder="Nickname" value={profileForm.nickname} onChange={(e) => setProfileForm({...profileForm, nickname: e.target.value})} style={{ ...S.input, marginBottom: 12, textAlign: 'left' }} />
-          <input type="number" placeholder="Numero Maglia" value={profileForm.numero} onChange={(e) => setProfileForm({...profileForm, numero: e.target.value})} style={{ ...S.input, marginBottom: 12, textAlign: 'left' }} />
-          <select value={profileForm.ruolo} onChange={(e) => setProfileForm({...profileForm, ruolo: e.target.value})} style={{ ...S.input, marginBottom: 12, textAlign: 'left' }}>
-            <option>ATT</option>
-            <option>CEN</option>
-            <option>DIF</option>
-            <option>POR</option>
-          </select>
-          <input type="number" placeholder="Età" value={profileForm.eta} onChange={(e) => setProfileForm({...profileForm, eta: e.target.value})} style={{ ...S.input, marginBottom: 12, textAlign: 'left' }} />
-          <input type="number" placeholder="Altezza (cm)" value={profileForm.altezza} onChange={(e) => setProfileForm({...profileForm, altezza: e.target.value})} style={{ ...S.input, marginBottom: 12, textAlign: 'left' }} />
-          <input type="number" placeholder="Peso (kg)" value={profileForm.peso} onChange={(e) => setProfileForm({...profileForm, peso: e.target.value})} style={{ ...S.input, marginBottom: 12, textAlign: 'left' }} />
-          <select value={profileForm.piede} onChange={(e) => setProfileForm({...profileForm, piede: e.target.value})} style={{ ...S.input, marginBottom: 20, textAlign: 'left' }}>
-            <option>Destro</option>
-            <option>Sinistro</option>
-            <option>Ambidestro</option>
-          </select>
-          <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
-            <button style={S.cancelBtn} onClick={() => { setShowProfileModal(false); setProfileForm({ nickname: '', numero: '', ruolo: 'ATT', eta: '', altezza: '', peso: '', piede: 'Destro' }); }}>ANNULLA</button>
-            <button style={S.saveBtn} onClick={handleSaveProfile}>💾 SALVA</button>
-          </div>
+          {editingPlayer && (
+            <div style={S.overlay}>
+              <div style={S.modal}>
+                <h3 style={S.modalTitle}>Modifica Statistiche — {editingPlayer.nickname}</h3>
+                {[['PRESENZE','gamesPlayed'],['VITTORIE','wins'],['PAREGGI','draws'],['SCONFITTE','losses'],['MVP','mvpCount']].map(([label, field], idx) => (
+                  <div key={field} style={{ marginBottom: idx === 4 ? 20 : 16 }}>
+                    <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4, fontFamily: "'Oswald', sans-serif" }}>{label}</label>
+                    <input type="number" value={editingPlayer[field]} onChange={(e) => setEditingPlayer({...editingPlayer, [field]: e.target.value})} style={{ ...S.input, textAlign: 'left' }} />
+                  </div>
+                ))}
+                <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+                  <button style={S.cancelBtn} onClick={() => setEditingPlayer(null)}>ANNULLA</button>
+                  <button style={S.saveBtn} onClick={saveEditedPlayerStats}>💾 SALVA</button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
-      </div>
-    )}
-
-    {/* MODAL EDIT PLAYER STATS */}
-    {editingPlayer && (
-      <div style={S.overlay}>
-        <div style={S.modal}>
-          <h3 style={S.modalTitle}>Modifica Statistiche — {editingPlayer.nickname}</h3>
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4, fontFamily: "'Oswald', sans-serif" }}>PRESENZE</label>
-            <input type="number" value={editingPlayer.gamesPlayed} onChange={(e) => setEditingPlayer({...editingPlayer, gamesPlayed: e.target.value})} style={{ ...S.input, textAlign: 'left' }} />
-          </div>
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4, fontFamily: "'Oswald', sans-serif" }}>VITTORIE</label>
-            <input type="number" value={editingPlayer.wins} onChange={(e) => setEditingPlayer({...editingPlayer, wins: e.target.value})} style={{ ...S.input, textAlign: 'left' }} />
-          </div>
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4, fontFamily: "'Oswald', sans-serif" }}>PAREGGI</label>
-            <input type="number" value={editingPlayer.draws} onChange={(e) => setEditingPlayer({...editingPlayer, draws: e.target.value})} style={{ ...S.input, textAlign: 'left' }} />
-          </div>
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4, fontFamily: "'Oswald', sans-serif" }}>SCONFITTE</label>
-            <input type="number" value={editingPlayer.losses} onChange={(e) => setEditingPlayer({...editingPlayer, losses: e.target.value})} style={{ ...S.input, textAlign: 'left' }} />
-          </div>
-          <div style={{ marginBottom: 20 }}>
-            <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 4, fontFamily: "'Oswald', sans-serif" }}>MVP</label>
-            <input type="number" value={editingPlayer.mvpCount} onChange={(e) => setEditingPlayer({...editingPlayer, mvpCount: e.target.value})} style={{ ...S.input, textAlign: 'left' }} />
-          </div>
-          <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
-            <button style={S.cancelBtn} onClick={() => setEditingPlayer(null)}>ANNULLA</button>
-            <button style={S.saveBtn} onClick={saveEditedPlayerStats}>💾 SALVA</button>
-          </div>
-        </div>
-      </div>
-    )}
-  </div>
-)}
+      )}
 
       {/* ═══ TAB: STATISTICHE ═══ */}
       {tab === "stats" && (
@@ -1064,7 +850,7 @@ export default function App() {
                   {[1, 0, 2].map(pos => {
                     const p = getSortedPlayers()[pos];
                     if (!p) return null;
-                    const medals = ["🥇", "🥈", "🥉"];
+                    const medals = ["🥇","🥈","🥉"];
                     const heights = [140, 100, 80];
                     return (
                       <div key={pos} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, order: pos === 0 ? 1 : pos === 1 ? 0 : 2 }}>
@@ -1128,11 +914,7 @@ export default function App() {
           {matchHistory.length === 0 ? (
             <p style={S.emptyState}>Nessuna partita registrata.</p>
           ) : matchHistory.map(m => (
-            <div 
-              key={m.id} 
-              style={{ ...S.histCard, cursor: adminMode ? 'pointer' : 'default' }}
-              onClick={() => adminMode && startEditingMatch(m)}
-            >
+            <div key={m.id} style={{ ...S.histCard, cursor: adminMode ? 'pointer' : 'default' }} onClick={() => adminMode && startEditingMatch(m)}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
                 <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 16, letterSpacing: 1.5 }}>{MATCH_DAYS.find(d => d.key === m.day)?.label || m.day}</span>
                 <span style={{ fontSize: 13, color: "#64748b" }}>{new Date(m.date).toLocaleDateString("it-IT")}</span>
@@ -1142,30 +924,17 @@ export default function App() {
                 <span style={{ fontSize: 28, fontWeight: 700, letterSpacing: 3 }}>{m.scoreA} — {m.scoreB}</span>
                 <span style={{ color: m.winner === "B" ? "#4ade80" : "#e2e8f0" }}>Squadra B</span>
               </div>
-              {m.mvp && (
-                <div style={{ textAlign: "center", marginBottom: 12, fontSize: 14, color: "#eab308", fontFamily: "'Oswald', sans-serif" }}>
-                  ⭐ MVP: {m.mvp}
-                </div>
-              )}
+              {m.mvp && <div style={{ textAlign: "center", marginBottom: 12, fontSize: 14, color: "#eab308", fontFamily: "'Oswald', sans-serif" }}>⭐ MVP: {m.mvp}</div>}
               {m.players && Array.isArray(m.players) && (
                 <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: 12, fontSize: 12 }}>
-                  <div style={{ color: '#94a3b8', fontFamily: "'Oswald', sans-serif", marginBottom: 4 }}>
-                    {m.players.length} giocatori
-                  </div>
-                  <div style={{ color: '#e2e8f0', lineHeight: 1.6 }}>
-                    {m.players.join(', ')}
-                  </div>
+                  <div style={{ color: '#94a3b8', fontFamily: "'Oswald', sans-serif", marginBottom: 4 }}>{m.players.length} giocatori</div>
+                  <div style={{ color: '#e2e8f0', lineHeight: 1.6 }}>{m.players.join(', ')}</div>
                 </div>
               )}
-              {adminMode && (
-                <div style={{ marginTop: 12, fontSize: 11, color: '#eab308', textAlign: 'center', fontFamily: "'Oswald', sans-serif" }}>
-                  Click per modificare
-                </div>
-              )}
+              {adminMode && <div style={{ marginTop: 12, fontSize: 11, color: '#eab308', textAlign: 'center', fontFamily: "'Oswald', sans-serif" }}>Click per modificare</div>}
             </div>
           ))}
 
-          {/* MODAL EDIT MATCH */}
           {editingMatch && (
             <div style={S.overlay}>
               <div style={S.modal}>
@@ -1189,30 +958,22 @@ export default function App() {
                     </div>
                   </div>
                 </div>
-
                 <div style={{ marginBottom: 20 }}>
                   <label style={{ display: 'block', fontFamily: "'Oswald', sans-serif", fontSize: 14, letterSpacing: 1.5, color: "#eab308", marginBottom: 8 }}>⭐ MVP DELLA PARTITA</label>
-                  <select 
-                    value={editingMatch.mvp} 
-                    onChange={(e) => setEditingMatch(p => ({ ...p, mvp: e.target.value }))}
-                    style={{ width: '100%', padding: '12px', background: '#1a202c', border: '2px solid #eab308', borderRadius: 10, color: '#e2e8f0', fontFamily: "'Oswald', sans-serif", fontSize: 15, cursor: 'pointer' }}
-                  >
+                  <select value={editingMatch.mvp} onChange={(e) => setEditingMatch(p => ({ ...p, mvp: e.target.value }))}
+                    style={{ width: '100%', padding: '12px', background: '#1a202c', border: '2px solid #eab308', borderRadius: 10, color: '#e2e8f0', fontFamily: "'Oswald', sans-serif", fontSize: 15, cursor: 'pointer' }}>
                     <option value="">-- Seleziona MVP --</option>
                     {editingMatch.players && editingMatch.players.map((name) => (
                       <option key={name} value={name}>{name}</option>
                     ))}
                   </select>
                 </div>
-
                 {editingMatch.players && (
                   <div style={{ marginBottom: 20, background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: 12 }}>
                     <div style={{ color: '#94a3b8', fontFamily: "'Oswald', sans-serif", fontSize: 12, marginBottom: 8 }}>GIOCATORI ({editingMatch.players.length})</div>
-                    <div style={{ color: '#e2e8f0', fontSize: 13, lineHeight: 1.8 }}>
-                      {editingMatch.players.join(', ')}
-                    </div>
+                    <div style={{ color: '#e2e8f0', fontSize: 13, lineHeight: 1.8 }}>{editingMatch.players.join(', ')}</div>
                   </div>
                 )}
-
                 <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
                   <button style={S.cancelBtn} onClick={() => setEditingMatch(null)}>ANNULLA</button>
                   <button style={S.saveBtn} onClick={saveEditedMatch}>💾 SALVA MODIFICHE</button>
@@ -1237,14 +998,13 @@ export default function App() {
   );
 }
 
-// ─── STYLES ───
 const S = {
   container: { position: "relative", minHeight: "100vh", background: "linear-gradient(145deg, #0a1628 0%, #0f2218 40%, #1a1a2e 100%)", fontFamily: "'Source Sans 3', sans-serif", color: "#e2e8f0", overflow: "hidden", paddingBottom: 40 },
   bgPattern: { position: "fixed", inset: 0, backgroundImage: "radial-gradient(circle at 20% 50%, rgba(22,163,74,0.08) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(234,179,8,0.05) 0%, transparent 50%)", pointerEvents: "none", zIndex: 0 },
   loadWrap: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100vh", background: "#0a1628" },
   spinner: { width: 48, height: 48, border: "4px solid rgba(22,163,74,0.2)", borderTopColor: "#16a34a", borderRadius: "50%", animation: "spin 0.8s linear infinite" },
   loadText: { marginTop: 16, color: "#94a3b8", fontFamily: "'Oswald', sans-serif", fontSize: 18, letterSpacing: 2 },
-  toast: { position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", padding: "12px 28px", borderRadius: 12, color: "white", fontWeight: 600, fontSize: 15, zIndex: 1000, animation: "slideIn 0.3s ease", boxShadow: "0 8px 32px rgba(0,0,0,0.4)" },
+  toast: { position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", padding: "12px 28px", borderRadius: 12, color: "white", fontWeight: 600, fontSize: 15, zIndex: 1000, boxShadow: "0 8px 32px rgba(0,0,0,0.4)" },
   subtitle: { fontFamily: "'Oswald', sans-serif", fontSize: 13, letterSpacing: 4, color: "#64748b", marginTop: 6, textTransform: "uppercase" },
   tabBar: { position: "relative", zIndex: 1, display: "flex", justifyContent: "center", gap: 4, padding: "0 12px 20px", flexWrap: "wrap" },
   tabBtn: { display: "flex", alignItems: "center", gap: 6, padding: "10px 16px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, color: "#94a3b8", cursor: "pointer", fontFamily: "'Oswald', sans-serif", fontSize: 13, letterSpacing: 1, transition: "all 0.2s" },
