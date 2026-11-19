@@ -255,6 +255,16 @@ function applyMatchToStats(stats, match, sign, sides) {
   return changed;
 }
 
+// Conferme dentro l'app: window.confirm/prompt in alcuni browser (app interne, Chrome con
+// "impedisci altre finestre di dialogo") si annullano da sole e il tocco sembrava non fare nulla.
+let openDialog = null;
+const uiAsk = (opts) =>
+  openDialog
+    ? new Promise((resolve) => openDialog({ ...opts, resolve }))
+    : Promise.resolve(opts.input ? window.prompt(opts.text, opts.value || "") : window.confirm(opts.text));
+const uiConfirm = (text, opts = {}) => uiAsk({ ...opts, text });
+const uiPrompt = (text, value = "", opts = {}) => uiAsk({ ...opts, text, input: true, value });
+
 function logEvent(type, detail) {
   push(ref(db, "logs"), { t: Date.now(), type, detail, dev: DEVICE_ID, me: lsGet("fazi_me") }).catch(() => {});
 }
@@ -287,7 +297,8 @@ export default function App() {
   const [players, setPlayers] = useState({});
   const [ratingAdjust, setRatingAdjust] = useState({});
   const [loading, setLoading] = useState(true);
-  const [weekId] = useState(getWeekId());
+  const [weekId, setWeekId] = useState(getWeekId);
+  const [, setClock] = useState(0); // ridisegna ogni minuto: chiusura liste e cambio settimana
   const [toast, setToast] = useState(null);
   const [adminMode, setAdminMode] = useState(false);
   const [adminClicks, setAdminClicks] = useState(0);
@@ -310,11 +321,44 @@ export default function App() {
   const [logFilter, setLogFilter] = useState("");
   const [undoStack, setUndoStack] = useState([]);
   const [busy, setBusy] = useState(false);
+  const [dialog, setDialog] = useState(null); // conferme/domande dentro l'app
+  const dialogRef = useRef(null);
 
   const autocompleteRef = useRef(null);
   const toastTimer = useRef(null);
 
-  const weekDates = useMemo(() => getWeekDates(), []);
+  const weekDates = useMemo(() => getWeekDates(), [weekId]);
+
+  useEffect(() => {
+    const refresh = () => { setWeekId(getWeekId()); setClock((c) => c + 1); };
+    const onVisible = () => { if (document.visibilityState === "visible") refresh(); };
+    const iv = setInterval(refresh, 60000);
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", refresh);
+    return () => {
+      clearInterval(iv);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", refresh);
+    };
+  }, []);
+
+  useEffect(() => {
+    openDialog = (d) => {
+      const prev = dialogRef.current;
+      if (prev) prev.resolve(prev.input ? null : false);
+      dialogRef.current = d;
+      setDialog(d);
+    };
+    return () => { openDialog = null; };
+  }, []);
+
+  const closeDialog = (ok) => {
+    const d = dialogRef.current;
+    if (!d) return;
+    dialogRef.current = null;
+    setDialog(null);
+    d.resolve(d.input ? (ok ? d.value : null) : ok);
+  };
   const generatedTeams = teamsArchive?.[weekId] || {};
 
   const showToast = (msg, type = "success") => {
@@ -439,7 +483,7 @@ export default function App() {
     const last = undoStack[undoStack.length - 1];
     if (!last) return;
     const mins = Math.round((Date.now() - last.t) / 60000);
-    if (!window.confirm(`Annullare "${last.label}"?${mins > 5 ? `\n\nAttenzione: è di ${mins} minuti fa, eventuali modifiche fatte da altri nel frattempo sugli stessi dati verranno sovrascritte.` : ""}`)) return;
+    if (!(await uiConfirm(`Annullare "${last.label}"?${mins > 5 ? `\n\nAttenzione: è di ${mins} minuti fa, eventuali modifiche fatte da altri nel frattempo sugli stessi dati verranno sovrascritte.` : ""}`))) return;
     try {
       await update(ref(db), last.prev);
       setUndoStack((st) => st.slice(0, -1));
@@ -461,17 +505,17 @@ export default function App() {
     logEvent("identity", old ? `Telefono passato da ${old} a ${name}` : `Telefono registrato come ${name}`);
   };
 
-  const changeIdentity = () => {
-    const nn = (window.prompt("Chi usa questo telefono? Scrivi il TUO nickname", me) || "").trim().replace(/\s+/g, " ");
+  const changeIdentity = async () => {
+    const nn = ((await uiPrompt("Chi usa questo telefono? Scrivi il TUO nickname", me)) || "").trim().replace(/\s+/g, " ");
     if (!nn || norm(nn) === norm(me)) return;
     if (BAD_CHARS.test(nn)) return showToast("Caratteri non permessi: . # $ / [ ]", "error");
-    if (!window.confirm(`Questo telefono diventa di "${canonical(nn)}".\nIl cambio resta registrato. Confermi?`)) return;
+    if (!(await uiConfirm(`Questo telefono diventa di "${canonical(nn)}".\nIl cambio resta registrato. Confermi?`))) return;
     setIdentity(canonical(nn));
     setPlayerName(canonical(nn));
   };
 
   const handleSignup = async (dayKey) => {
-    const typed = playerName.trim().replace(/\s+/g, " ");
+    const typed = (playerName.trim() || (adminMode ? "" : me)).replace(/\s+/g, " ");
     if (!typed) return showToast("Scrivi il tuo nome!", "error");
     if (BAD_CHARS.test(typed)) return showToast("Caratteri non permessi: . # $ / [ ]", "error");
     if (isLocked(dayKey) && !adminMode) return showToast("Lista chiusa!", "error");
@@ -480,17 +524,17 @@ export default function App() {
     if (!adminMode) {
       // Prima volta su questo telefono: chiediamo chi sei
       if (!who) {
-        if (window.confirm(`Ti stai iscrivendo come "${name}".\n\nSei tu?\nOK = sì, sono io\nAnnulla = sto iscrivendo un'altra persona`)) {
+        if (await uiConfirm(`Ti stai iscrivendo come "${name}".\n\nSei tu?`, { okLabel: "Sì, sono io", cancelLabel: "No, iscrivo un amico" })) {
           who = name;
         } else {
-          const w = (window.prompt("Allora scrivi il TUO nickname (chi usa questo telefono):") || "").trim().replace(/\s+/g, " ");
+          const w = ((await uiPrompt("Allora scrivi il TUO nickname (chi usa questo telefono):")) || "").trim().replace(/\s+/g, " ");
           if (!w) return;
           if (BAD_CHARS.test(w)) return showToast("Caratteri non permessi: . # $ / [ ]", "error");
           who = canonical(w);
         }
         setIdentity(who);
       }
-      if (norm(name) !== norm(who) && !window.confirm(`Stai iscrivendo ${name} da parte tua.\nIn lista comparirà "da ${who}". Continuare?`)) return;
+      if (norm(name) !== norm(who) && !(await uiConfirm(`Stai iscrivendo ${name} da parte tua.\nIn lista comparirà "da ${who}". Continuare?`))) return;
     }
     const forOther = !adminMode && norm(name) !== norm(who);
     let reason = null;
@@ -508,7 +552,10 @@ export default function App() {
       const spot = arr.findIndex((n) => norm(n) === norm(name)) + 1;
       if (spot <= MAX_PLAYERS) showToast(`${name} iscritto per ${dayLabel(dayKey)}!`);
       else showToast(`${name} in riserva #${spot - MAX_PLAYERS} per ${dayLabel(dayKey)}!`);
-      set(ref(db, `signupMeta/${weekId}/${dayKey}/${statsKey(name)}`), { by: adminMode ? "admin" : who, dev: DEVICE_ID, t: Date.now() }).catch(() => {});
+      set(ref(db, `signupMeta/${weekId}/${dayKey}/${statsKey(name)}`), { by: adminMode ? "admin" : who, dev: DEVICE_ID, t: Date.now() }).catch((err) => {
+        console.error("signupMeta", err);
+        showToast(`${name} è in lista, ma non riesco a salvare chi l'ha iscritto: per toglierlo serve l'admin`, "error");
+      });
       logEvent(forOther ? "signup_for" : "signup", forOther ? `${who} ha iscritto ${name} → ${dayLabel(dayKey)}` : `${name} → ${dayLabel(dayKey)}${adminMode ? " (admin)" : ""}`);
       if (!adminMode) setPlayerName(who);
     } catch (err) {
@@ -520,22 +567,31 @@ export default function App() {
   // Ognuno può togliere solo sé stesso o chi ha iscritto lui; l'admin tutti
   const canRemove = (dayKey, name) => {
     if (adminMode) return true;
-    if (!myName) return false;
     const mt = metaOf(dayKey, name);
+    if (mt && mt.dev === DEVICE_ID) return true; // iscritto da questo stesso telefono
+    if (!myName) return false;
     return norm(name) === myName || (mt && norm(mt.by) === myName);
   };
 
   const handleRemove = async (dayKey, name) => {
     if (isLocked(dayKey) && !adminMode) return showToast("Lista chiusa!", "error");
-    if (!canRemove(dayKey, name)) return showToast("Puoi togliere solo te stesso o chi hai iscritto tu", "error");
-    const mine = norm(name) === myName;
-    if (!window.confirm(`Togliere ${name} dalla lista di ${dayLabel(dayKey)}?`)) return;
+    let mine = norm(name) === myName;
+    if (!canRemove(dayKey, name)) {
+      if (me) return showToast("Puoi togliere solo te stesso o chi hai iscritto tu", "error");
+      // Il browser non ricorda chi sei (altro browser, dati cancellati, Safari dopo giorni senza aprire l'app):
+      // ci si fa riconoscere toccando il proprio nome. Resta nel registro come cambio telefono.
+      if (!(await uiConfirm(`Sei tu ${name}?\n\nQuesto telefono verrà registrato come "${name}".`, { okLabel: "Sì, sono io", cancelLabel: "No" }))) return;
+      setIdentity(canonical(name));
+      setPlayerName(canonical(name));
+      mine = true;
+    }
+    if (!(await uiConfirm(`Togliere ${name} dalla lista di ${dayLabel(dayKey)}?`))) return;
     try {
       await runTransaction(ref(db, `signups/${weekId}/${dayKey}`), (cur) => asArray(cur).filter((n) => n !== name));
       remove(ref(db, `signupMeta/${weekId}/${dayKey}/${statsKey(name)}`)).catch(() => {});
       showToast(`${name} rimosso.`);
       if (mine || adminMode) logEvent("remove", `${name} ✕ ${dayLabel(dayKey)}${adminMode ? " (admin)" : ""}`);
-      else logEvent("remove_for", `${me} ha tolto ${name} ✕ ${dayLabel(dayKey)}`);
+      else logEvent("remove_for", `${me || `telefono ${DEVICE_ID}`} ha tolto ${name} ✕ ${dayLabel(dayKey)}`);
     } catch (err) {
       showToast("Errore di connessione, riprova", "error");
     }
@@ -566,12 +622,12 @@ export default function App() {
     const { dayKey, name } = adminSheet;
     let label = "";
     if (action === "rename") {
-      const nn = (window.prompt(`Correggi il nome di "${name}"`, name) || "").trim().replace(/\s+/g, " ");
+      const nn = ((await uiPrompt(`Correggi il nome di "${name}"`, name)) || "").trim().replace(/\s+/g, " ");
       if (!nn || nn === name) return;
       if (BAD_CHARS.test(nn)) return showToast("Caratteri non permessi: . # $ / [ ]", "error");
       arg = nn;
     }
-    if (action === "remove" && !window.confirm(`Togliere ${name} da ${dayLabel(dayKey)}?`)) return;
+    if (action === "remove" && !(await uiConfirm(`Togliere ${name} da ${dayLabel(dayKey)}?`))) return;
     const ok = await adminSignupOp((week) => {
       const arr = week[dayKey];
       const i = arr.indexOf(name);
@@ -629,7 +685,7 @@ export default function App() {
   };
 
   const unfixTeams = async (dayKey) => {
-    if (!window.confirm("Tornare alle squadre automatiche per questo giorno?")) return;
+    if (!(await uiConfirm("Tornare alle squadre automatiche per questo giorno?"))) return;
     await remove(ref(db, `teams/${weekId}/${dayKey}`));
     logEvent("admin", `Squadre sbloccate (${dayLabel(dayKey)})`);
     showToast("Squadre di nuovo automatiche");
@@ -685,7 +741,7 @@ export default function App() {
     if (!teamA.length || !teamB.length) return showToast("Entrambe le squadre devono avere giocatori", "error");
     if (!hasName([...teamA, ...teamB], mvp)) return showToast("L'MVP deve essere tra i presenti", "error");
     const dup = matchHistory.find((m) => m.weekId === weekId && m.day === dayKey);
-    if (dup && !window.confirm(`Esiste già una partita registrata per ${dayLabel(dayKey)} (${dup.scoreA}-${dup.scoreB}). Registrarne un'altra?`)) return;
+    if (dup && !(await uiConfirm(`Esiste già una partita registrata per ${dayLabel(dayKey)} (${dup.scoreA}-${dup.scoreB}). Registrarne un'altra?`))) return;
     const winner = scoreA > scoreB ? "A" : scoreB > scoreA ? "B" : "draw";
     const id = Date.now();
     const match = {
@@ -768,7 +824,7 @@ export default function App() {
     const oldSides = oldSidesFor(em, orig);
     if (oldSides === "missing") return showToast("Assegna la squadra a tutti per confermare", "error");
     const warn = oldSides ? "" : "\n\nPartita vecchia senza squadre salvate: verranno tolte presenze e MVP, ma non vittorie/sconfitte (spunta la conferma squadre per toglierle).";
-    if (!window.confirm(`Eliminare la partita ${dayLabel(orig.day)} ${orig.scoreA}-${orig.scoreB} e aggiornare le statistiche?${warn}`)) return;
+    if (!(await uiConfirm(`Eliminare la partita ${dayLabel(orig.day)} ${orig.scoreA}-${orig.scoreB} e aggiornare le statistiche?${warn}`))) return;
     const stats = clone(playerStats);
     const ch = applyMatchToStats(stats, orig, -1, oldSides);
     const updates = { [`matchHistory/${orig.id}`]: null };
@@ -799,7 +855,7 @@ export default function App() {
     if (BAD_CHARS.test(nickname)) return showToast("Caratteri non permessi nel nome: . # $ / [ ]", "error");
     const key = sanitizeKey(nickname);
     const existing = findProfile(nickname);
-    if (existing && existing.key !== origKey && !window.confirm(`Esiste già un profilo "${existing.data.nickname || existing.key}". Sovrascriverlo?`)) return;
+    if (existing && existing.key !== origKey && !(await uiConfirm(`Esiste già un profilo "${existing.data.nickname || existing.key}". Sovrascriverlo?`))) return;
     try {
       await set(ref(db, `players/${key}`), {
         nickname, numero: parseInt(numero) || 0, ruolo,
@@ -817,7 +873,7 @@ export default function App() {
   };
 
   const handleDeletePlayer = async (key, nickname) => {
-    if (!window.confirm(`Eliminare il profilo (card) di ${nickname}?\nLe statistiche restano.`)) return;
+    if (!(await uiConfirm(`Eliminare il profilo (card) di ${nickname}?\nLe statistiche restano.`))) return;
     await adminUpdate({ [`players/${key}`]: null }, `Profilo ${nickname} eliminato`);
   };
 
@@ -849,7 +905,7 @@ export default function App() {
 
   const deletePlayerStats = async () => {
     const ep = editingPlayer;
-    if (!ep || !window.confirm(`Eliminare tutte le statistiche di ${ep.nickname}?\n(Le partite nello storico restano. Puoi annullare.)`)) return;
+    if (!ep || !(await uiConfirm(`Eliminare tutte le statistiche di ${ep.nickname}?\n(Le partite nello storico restano. Puoi annullare.)`))) return;
     const ok = await adminUpdate({ [`playerStats/${ep.key}`]: null, [`ratingAdjust/${ep.key}`]: null }, `Statistiche ${ep.nickname} eliminate`);
     if (ok) setEditingPlayer(null);
   };
@@ -862,7 +918,7 @@ export default function App() {
     if (norm(from) === norm(into)) return showToast("I due nomi sono uguali", "error");
     if (BAD_CHARS.test(into)) return showToast("Caratteri non permessi nel nuovo nome", "error");
     const target = allNames.find((n) => norm(n) === norm(into)) || into;
-    if (!window.confirm(`Unire "${from}" dentro "${target}"?\n\nStatistiche sommate, storico partite, liste e squadre aggiornate. "${from}" sparisce. Puoi annullare subito dopo.`)) return;
+    if (!(await uiConfirm(`Unire "${from}" dentro "${target}"?\n\nStatistiche sommate, storico partite, liste e squadre aggiornate. "${from}" sparisce. Puoi annullare subito dopo.`))) return;
 
     const kF = statsKey(from), kI = statsKey(target);
     const updates = {};
@@ -931,13 +987,13 @@ export default function App() {
 
   // ─── RESET ───
   const resetWeek = async () => {
-    if (!window.confirm("Azzerare tutte le liste e le squadre della settimana?\n(Puoi annullare subito dopo.)")) return;
+    if (!(await uiConfirm("Azzerare tutte le liste e le squadre della settimana?\n(Puoi annullare subito dopo.)"))) return;
     await adminUpdate({ [`signups/${weekId}`]: null, [`teams/${weekId}`]: null, [`signupMeta/${weekId}`]: null }, "Liste della settimana azzerate");
   };
 
   const resetAllStats = async () => {
-    if (!window.confirm("ATTENZIONE: azzerare TUTTE le statistiche e lo storico?")) return;
-    if (window.prompt('Per confermare scrivi AZZERA') !== "AZZERA") return showToast("Annullato", "error");
+    if (!(await uiConfirm("ATTENZIONE: azzerare TUTTE le statistiche e lo storico?"))) return;
+    if ((await uiPrompt('Per confermare scrivi AZZERA')) !== "AZZERA") return showToast("Annullato", "error");
     await adminUpdate({ playerStats: null, matchHistory: null, ratingAdjust: null }, "Statistiche azzerate");
   };
 
@@ -1037,6 +1093,8 @@ export default function App() {
       .sort((a, b) => (b[sortBy] || 0) - (a[sortBy] || 0));
 
   const myName = norm(me);
+  const typedName = canonical((playerName.trim() || (adminMode ? "" : me)).replace(/\s+/g, " "));
+  const forFriend = !adminMode && !!me && !!typedName && norm(typedName) !== myName;
 
   if (loading) {
     return (
@@ -1063,7 +1121,7 @@ export default function App() {
             <button onClick={openLog} style={S.adminBarBtn}>📜 Registro</button>
             <button onClick={() => setMergeForm({ from: "", into: "" })} style={S.adminBarBtn}>🔀 Unisci</button>
             <button onClick={() => setPinModal({ mode: "change", pin: "", pin2: "", remember: true, error: "" })} style={S.adminBarBtn}>🔑 PIN</button>
-            <button onClick={() => exitAdmin(window.confirm("Vuoi che questo telefono richieda il PIN al prossimo accesso?"))} style={{ ...S.adminBarBtn, color: "#f87171" }}>Esci</button>
+            <button onClick={async () => exitAdmin(await uiConfirm("Vuoi che questo telefono richieda il PIN al prossimo accesso?", { okLabel: "Sì", cancelLabel: "No" }))} style={{ ...S.adminBarBtn, color: "#f87171" }}>Esci</button>
           </div>
         </div>
       )}
@@ -1170,7 +1228,7 @@ export default function App() {
             <p style={{ textAlign: "center", color: "#64748b", fontSize: 12, marginTop: -14, marginBottom: 16 }}>
               {me ? (
                 <>📱 Questo telefono è di <strong style={{ color: "#e2e8f0" }}>{me}</strong> · <span onClick={changeIdentity} style={{ color: "#4ade80", cursor: "pointer", textDecoration: "underline" }}>non sei tu?</span></>
-              ) : "Alla prima iscrizione ti chiediamo chi sei: così ognuno gestisce il proprio nome."}
+              ) : "Alla prima iscrizione ti chiediamo chi sei: così ognuno gestisce il proprio nome. Sei già in lista? Tocca il tuo nome per gestirlo."}
             </p>
           )}
 
@@ -1181,12 +1239,13 @@ export default function App() {
               const riserve = playersArr.slice(MAX_PLAYERS, MAX_TOTAL);
               const locked = isLocked(day.key);
               const isFull = playersArr.length >= MAX_TOTAL;
-              const imIn = myName && hasName(playersArr, myName);
+              const nameIn = !adminMode && !!typedName && hasName(playersArr, typedName);
               const renderRow = (p, i, reserve) => {
                 const mine = norm(p) === myName;
                 const mt = metaOf(day.key, p);
                 const byOther = mt && mt.by && mt.by !== "admin" && norm(mt.by) !== norm(p);
-                const canTouch = adminMode || (!locked && canRemove(day.key, p));
+                const removable = adminMode || (!locked && canRemove(day.key, p));
+                const canTouch = removable || (!locked && !me); // senza identità: tocca il tuo nome per farti riconoscere
                 return (
                   <div key={`${reserve ? "r" : "t"}${i}-${p}`}
                     style={{
@@ -1204,7 +1263,7 @@ export default function App() {
                       {p}{mine && <span style={{ color: "#4ade80", fontSize: 11, marginLeft: 6 }}>(tu)</span>}
                       {byOther && <span style={S.byTag}>da {mt.by}</span>}
                     </span>
-                    {adminMode ? <span style={{ fontSize: 13, color: "#eab308" }}>⋯</span> : canTouch && <span style={S.removeX}>✕</span>}
+                    {adminMode ? <span style={{ fontSize: 13, color: "#eab308" }}>⋯</span> : removable && <span style={S.removeX}>✕</span>}
                   </div>
                 );
               };
@@ -1235,13 +1294,17 @@ export default function App() {
                     {playersArr.length === 0 && <p style={S.emptyMsg}>Nessun iscritto</p>}
                   </div>
                   <div style={{ display: "flex", gap: 8, margin: "8px 12px 12px" }}>
-                    <button onClick={() => handleSignup(day.key)} disabled={isFull || (locked && !adminMode) || (imIn && !adminMode)}
+                    <button onClick={() => handleSignup(day.key)} disabled={isFull || (locked && !adminMode) || nameIn}
                       style={{
                         ...S.signBtn, margin: 0, flex: 1,
-                        ...(isFull || (locked && !adminMode) || (imIn && !adminMode) ? S.signBtnFull : {}),
+                        ...(isFull || (locked && !adminMode) || nameIn ? S.signBtnFull : {}),
                         ...(locked && !adminMode ? { background: "rgba(220,38,38,0.1)", color: "#f87171" } : {}),
                       }}>
-                      {locked && !adminMode ? "🔒 CHIUSA" : imIn && !adminMode ? "✓ SEI IN LISTA" : isFull ? "COMPLETO ✓" : titolari.length >= MAX_PLAYERS ? `RISERVA (${MAX_TOTAL - playersArr.length} posti)` : `MI ISCRIVO (${MAX_PLAYERS - titolari.length} posti)`}
+                      {locked && !adminMode ? "🔒 CHIUSA"
+                        : nameIn ? (forFriend ? `✓ ${typedName} è in lista` : "✓ SEI IN LISTA")
+                        : isFull ? "COMPLETO ✓"
+                        : titolari.length >= MAX_PLAYERS ? (forFriend ? `${typedName} in riserva` : `RISERVA (${MAX_TOTAL - playersArr.length} posti)`)
+                        : forFriend ? `ISCRIVI ${typedName}` : `MI ISCRIVO (${MAX_PLAYERS - titolari.length} posti)`}
                     </button>
                     <button onClick={() => shareDay(day.key)} style={S.shareBtn} title="Condividi su WhatsApp">📲</button>
                   </div>
@@ -1841,6 +1904,24 @@ export default function App() {
       )}
 
       {/* ═══ MODALE: PIN ADMIN ═══ */}
+      {dialog && (
+        <div style={{ ...S.overlay, zIndex: 900, alignItems: "center" }} onClick={() => closeDialog(false)}>
+          <div style={{ ...S.modal, maxWidth: 380 }} onClick={(e) => e.stopPropagation()}>
+            <p style={{ color: "#e2e8f0", fontSize: 16, lineHeight: 1.5, whiteSpace: "pre-line", margin: "0 0 18px", textAlign: "center" }}>{dialog.text}</p>
+            {dialog.input && (
+              <input autoFocus value={dialog.value || ""} maxLength={40}
+                onChange={(e) => { const d = { ...dialog, value: e.target.value }; dialogRef.current = d; setDialog(d); }}
+                onKeyDown={(e) => e.key === "Enter" && closeDialog(true)}
+                style={{ ...S.formInput, textAlign: "center" }} />
+            )}
+            <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+              <button onClick={() => closeDialog(false)} style={S.cancelBtn}>{dialog.cancelLabel || "Annulla"}</button>
+              <button autoFocus={!dialog.input} onClick={() => closeDialog(true)} style={S.saveBtn}>{dialog.okLabel || "OK"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {pinModal && (
         <div style={S.overlay}>
           <div style={{ ...S.modal, maxWidth: 380 }}>
