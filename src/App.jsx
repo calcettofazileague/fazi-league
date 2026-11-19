@@ -327,27 +327,31 @@ function SectionHead({ title, sub, children }) {
 }
 
 // ─── CARD GIOCATORE ───
-// Metallo diverso per livello; la maglia al centro è sempre quella della Fazi League.
+// Colori diversi per livello: fondo scuro e intenso, cornice brillante, numero grande al centro.
 const CARD_THEMES = {
   ROOKIE: {
-    frame: "linear-gradient(135deg, #5c3216 0%, #e0a26a 38%, #8a4b22 62%, #f0bd8c 100%)",
-    body: "linear-gradient(165deg, #d38c55 0%, #9a5a2e 55%, #5e3216 100%)",
-    text: "#fff4ea", accent: "#ffd7b0", line: "rgba(255,235,215,0.35)", shine: false,
+    frame: "linear-gradient(135deg, #9a3412 0%, #fdba74 28%, #f97316 50%, #fed7aa 72%, #c2410c 100%)",
+    body: "linear-gradient(165deg, #9a3412 0%, #4a1706 52%, #1a0802 100%)",
+    glow: "rgba(251,146,60,0.45)", num: "linear-gradient(180deg, #fff7ed 15%, #fdba74 100%)",
+    text: "#fff7ed", accent: "#fdba74", line: "rgba(253,186,116,0.35)",
   },
   VETERANO: {
-    frame: "linear-gradient(135deg, #4b5563 0%, #f8fafc 38%, #9ca3af 62%, #e5e7eb 100%)",
-    body: "linear-gradient(165deg, #f1f5f9 0%, #b6bdc8 55%, #6b7280 100%)",
-    text: "#111827", accent: "#374151", line: "rgba(17,24,39,0.25)", shine: false,
+    frame: "linear-gradient(135deg, #475569 0%, #e2e8f0 28%, #7dd3fc 50%, #f8fafc 72%, #64748b 100%)",
+    body: "linear-gradient(165deg, #3b4b63 0%, #1b2638 52%, #090f1a 100%)",
+    glow: "rgba(125,211,252,0.4)", num: "linear-gradient(180deg, #ffffff 15%, #bae6fd 100%)",
+    text: "#f8fafc", accent: "#bae6fd", line: "rgba(186,230,253,0.32)",
   },
   ELITE: {
-    frame: "linear-gradient(135deg, #7c2d12 0%, #fde68a 38%, #b45309 62%, #fef3c7 100%)",
-    body: "linear-gradient(165deg, #fef08a 0%, #eab308 50%, #a16207 100%)",
-    text: "#2b1900", accent: "#5c3b00", line: "rgba(43,25,0,0.28)", shine: true,
+    frame: "linear-gradient(135deg, #a16207 0%, #fde68a 28%, #facc15 50%, #fef9c3 72%, #b45309 100%)",
+    body: "linear-gradient(165deg, #166534 0%, #0b2e1a 52%, #03110a 100%)",
+    glow: "rgba(250,204,21,0.42)", num: "linear-gradient(180deg, #fefce8 10%, #facc15 100%)",
+    text: "#fefce8", accent: "#fde047", line: "rgba(253,224,71,0.35)",
   },
   LEGGENDA: {
     frame: "linear-gradient(135deg, #4c1d95 0%, #c4b5fd 30%, #22d3ee 50%, #f0abfc 70%, #7c3aed 100%)",
     body: "linear-gradient(165deg, #2e1065 0%, #1e1b4b 50%, #0b0b1a 100%)",
-    text: "#f5f3ff", accent: "#c4b5fd", line: "rgba(196,181,253,0.35)", shine: true,
+    glow: "rgba(167,139,250,0.5)", num: "linear-gradient(180deg, #ffffff 10%, #c4b5fd 60%, #67e8f9 100%)",
+    text: "#f5f3ff", accent: "#c4b5fd", line: "rgba(196,181,253,0.35)",
   },
 };
 const FOOT_SHORT = { Destro: "DX", Sinistro: "SX", Ambidestro: "AMB" };
@@ -366,7 +370,7 @@ function PlayerCard({ p, tier, winRate, ovr, adminMode, mine, onOpen, onDelete }
           <div style={{ position: "absolute", inset: 4, clipPath: CARD_CLIP, background: t.body, color: t.text, overflow: "hidden" }}>
             {/* trama e riflesso */}
             <div style={{ position: "absolute", inset: 0, backgroundImage: "repeating-linear-gradient(135deg, rgba(255,255,255,0.07) 0 2px, transparent 2px 9px)" }} />
-            <div className={t.shine ? "fl-card-shine" : undefined} style={{ position: "absolute", inset: 0, backgroundImage: "linear-gradient(115deg, transparent 35%, rgba(255,255,255,0.32) 48%, transparent 60%)", backgroundSize: "260% 100%", backgroundPosition: "100% 0", mixBlendMode: "soft-light" }} />
+            <div className="fl-card-shine" style={{ position: "absolute", inset: 0, backgroundImage: "linear-gradient(115deg, transparent 35%, rgba(255,255,255,0.32) 48%, transparent 60%)", backgroundSize: "260% 100%", backgroundPosition: "100% 0", mixBlendMode: "soft-light" }} />
 
             {/* in alto: ruolo e piede a sinistra, stemma e livello a destra */}
             <div style={{ position: "relative", display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "14px 14px 0" }}>
@@ -378,18 +382,11 @@ function PlayerCard({ p, tier, winRate, ovr, adminMode, mine, onOpen, onDelete }
               <Stemma size={30} />
             </div>
 
-            {/* maglia con il numero */}
-            <svg viewBox="0 0 120 104" width="118" height="102" style={{ position: "relative", display: "block", margin: "-14px auto 0" }} aria-hidden="true">
-              <defs>
-                <linearGradient id={`shirt-${p.key}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0" stopColor="#1f5a3a" /><stop offset="1" stopColor="#0b2216" />
-                </linearGradient>
-              </defs>
-              <path d="M39 6L15 17L4 43L22 51L27 41V100H93V41L98 51L116 43L105 17L81 6C77 14 69 18 60 18S43 14 39 6Z" fill={`url(#shirt-${p.key})`} stroke="#eab308" strokeWidth="1.6" strokeLinejoin="round" />
-              <path d="M39 6C43 14 51 18 60 18S77 14 81 6" fill="none" stroke="#fde68a" strokeWidth="2.4" />
-              <path d="M6.5 37.5L23 45M113.5 37.5L97 45" stroke="#eab308" strokeWidth="2" />
-              <text x="60" y="81" textAnchor="middle" fontFamily="Oswald, sans-serif" fontSize={num.length > 2 ? 34 : 46} fontWeight="700" fill="#fde68a" stroke="#0b2216" strokeWidth="0.6">{num}</text>
-            </svg>
+            {/* numero grande con alone del colore del livello */}
+            <div style={{ position: "relative", height: 112, margin: "-6px 0 0", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <div style={{ position: "absolute", width: 150, height: 120, background: `radial-gradient(closest-side, ${t.glow}, transparent)` }} />
+              <span style={{ position: "relative", fontFamily: "'Oswald', sans-serif", fontWeight: 700, fontSize: num.length > 2 ? 76 : 96, lineHeight: 1, letterSpacing: 2, backgroundImage: t.num, WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent", filter: "drop-shadow(0 3px 6px rgba(0,0,0,0.45))" }}>{num}</span>
+            </div>
 
             {/* nome */}
             <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 8, padding: "4px 12px 0" }}>
