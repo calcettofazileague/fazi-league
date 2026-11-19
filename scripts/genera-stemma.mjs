@@ -89,11 +89,11 @@ function heron(x, y, k) {
   const g = "url(#fl-gold-v)";
   return `
   <g transform="translate(${f(x - 258 * k)} ${f(y - 5 * k)}) scale(${k})">
-    <path d="${legs}" stroke="${g}" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-    <path d="${toes}" stroke="${g}" stroke-width="5.5" stroke-linecap="round" fill="none"/>
+    <path d="${legs}" stroke="${g}" stroke-width="10.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <path d="${toes}" stroke="${g}" stroke-width="6.5" stroke-linecap="round" fill="none"/>
     <circle cx="258" cy="380" r="6.5" fill="${g}"/><circle cx="294" cy="382" r="6.5" fill="${g}"/>
-    <path d="${crest}" stroke="${g}" stroke-width="4.5" stroke-linecap="round" fill="none"/>
-    <path d="${plumes}" stroke="${g}" stroke-width="4" stroke-linecap="round" fill="none"/>
+    <path d="${crest}" stroke="${g}" stroke-width="5.5" stroke-linecap="round" fill="none"/>
+    <path d="${plumes}" stroke="${g}" stroke-width="5" stroke-linecap="round" fill="none"/>
     <path d="${body}" fill="${g}"/>
     <path d="${wingLine}" stroke="${C.green2}" stroke-width="5" stroke-linecap="round" fill="none" opacity=".35"/>
     <circle cx="207" cy="20" r="4" fill="${C.green2}"/>
@@ -140,7 +140,7 @@ function crest() {
   <path d="${textPath(OSWALD_700, "FAZI", 120, 146, 78, 7)}" fill="url(#fl-silver)"/>
   <path d="M50 160h40M150 160h40" stroke="url(#fl-gold)" stroke-width="2" stroke-linecap="round"/>
   <path d="${textPath(OSWALD_500, "LEAGUE", 120, 169.5, 23, 7.5)}" fill="url(#fl-gold)"/>
-  ${heron(120, 173, 0.15)}`;
+  ${heron(120, 182, 0.118)}`;
 }
 
 // ─── Versione piccola (favicon): scudo, bordo oro, "F" ───
