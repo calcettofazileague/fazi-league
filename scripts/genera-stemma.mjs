@@ -70,29 +70,38 @@ function shield(i = 0) {
 
 // Airone (simbolo di Fazi) in posa araldica: di fronte, ali aperte, su una zampa sola,
 // testa di profilo rivolta a sinistra. Coordinate locali con lo 0 al centro del corpo;
-// (x, y) = dove va lo 0, k = scala. Ingombro: x da -56 a 56, y da -21 a 80.
+// (x, y) = dove va lo 0, k = scala. Ingombro: x da -54 a 54, y da -22 a 80.
 function heron(x, y, k) {
-  // ala destra; la sinistra è la stessa specchiata
-  const wing = "M5 18C12 4 30 -10 56 -20L47 -10L54 -8L45 0L51 3L41 8.5L45.5 12L35 15.5L37.5 20L26 22L27 26.5L9 30Z";
-  const coverts = "M9 25C19 15 31 5 47 -7";
-  const body = "M0 15C5 17 6.5 27 6 36C5.5 44 3 50 0 54C-3 50 -5.5 44 -6 36C-6.5 27 -5 17 0 15Z";
-  const tail = "M-5 50L0 62L5 50Z";
-  const neck = "M0 17C4.5 10 4.5 4 1 -2C-2 -6.5 -1.5 -10 1 -12.5";
-  const head = "M-2.5 -17.5C0 -20 4 -19.5 5 -16.5L16 -20L5.2 -14C4.6 -11.5 2 -10.5 -0.5 -11.5L-21 -13.6Z";
-  const legs = "M2 53L2 78M-4.5 79.5L2 78L7.5 79.5M-2 52L-10 61L-2.5 65.5";
+  // ala destra: bordo d'attacco liscio, bordo d'uscita a lobi arrotondati (le penne);
+  // la sinistra è la stessa specchiata
+  const edge = [[54, -14], [50.5, -3.5], [45, 5.5], [37.5, 12.5], [28.5, 18.5], [18.5, 23.5], [8, 27.5]];
+  let wing = `M3 17C12 5 30 -6 ${edge[0][0]} ${edge[0][1]}`;
+  for (let n = 1; n < edge.length; n++) {
+    const [ax, ay] = edge[n - 1], [bx, by] = edge[n];
+    const len = Math.hypot(bx - ax, by - ay), depth = n === edge.length - 1 ? 2.2 : 3.4;
+    const cx = (ax + bx) / 2 + ((by - ay) / len) * depth, cy = (ay + by) / 2 - ((bx - ax) / len) * depth;
+    wing += `Q${f(cx)} ${f(cy)} ${bx} ${by}`;
+  }
+  wing += "Z";
+  const coverts = "M8 22C18 12 32 2 48 -8";
+  const body = "M0 16C4.5 18 5.5 27 5 35C4.5 43 2.5 49 0 53C-2.5 49 -4.5 43 -5 35C-5.5 27 -4.5 18 0 16Z";
+  const tail = "M-3.5 49Q0 58 0 60Q0 58 3.5 49Z";
+  const neck = "M0 18C3.5 11 3.5 5 0.6 -0.5C-1.8 -5 -1.2 -9 0.8 -11.5";
+  const head = "M-1.8 -16.4C0.2 -18.6 3.4 -18.2 4.3 -15.6L14 -19.2L4.4 -13.4C3.8 -11.4 1.6 -10.6 -0.4 -11.4L-18 -13Z";
+  const legs = "M1.6 52L1.6 77M-3.6 78.4L1.6 77L6.4 78.4M-1.6 51L-8 59L-2.2 63";
   const g = 'fill="url(#fl-gold-v)"';
   return `
   <g transform="translate(${f(x)} ${f(y)}) scale(${k})">
-    <path d="${legs}" stroke="url(#fl-gold-v)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <path d="${legs}" stroke="url(#fl-gold-v)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
     <path d="${wing}" ${g}/>
     <path d="${wing}" ${g} transform="scale(-1 1)"/>
-    <path d="${coverts}" stroke="${C.green2}" stroke-width="1.3" stroke-linecap="round" fill="none" opacity=".45"/>
-    <path d="${coverts}" stroke="${C.green2}" stroke-width="1.3" stroke-linecap="round" fill="none" opacity=".45" transform="scale(-1 1)"/>
+    <path d="${coverts}" stroke="${C.green2}" stroke-width="1" stroke-linecap="round" fill="none" opacity=".4"/>
+    <path d="${coverts}" stroke="${C.green2}" stroke-width="1" stroke-linecap="round" fill="none" opacity=".4" transform="scale(-1 1)"/>
     <path d="${tail}" ${g}/>
     <path d="${body}" ${g}/>
-    <path d="${neck}" stroke="url(#fl-gold-v)" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+    <path d="${neck}" stroke="url(#fl-gold-v)" stroke-width="3.4" stroke-linecap="round" fill="none"/>
     <path d="${head}" ${g}/>
-    <circle cx="0.6" cy="-15.6" r="1.1" fill="${C.green2}"/>
+    <circle cx="0.9" cy="-15.2" r="0.95" fill="${C.green2}"/>
   </g>`;
 }
 
@@ -107,7 +116,7 @@ const defs = `
     <linearGradient id="fl-rim" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="${C.gold1}"/><stop offset=".55" stop-color="${C.gold2}"/><stop offset="1" stop-color="${C.gold3}"/>
     </linearGradient>
-    <linearGradient id="fl-gold-v" x1="0" y1="-21" x2="0" y2="80" gradientUnits="userSpaceOnUse">
+    <linearGradient id="fl-gold-v" x1="0" y1="-22" x2="0" y2="80" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="${C.gold1}"/><stop offset=".6" stop-color="${C.gold2}"/><stop offset="1" stop-color="${C.gold3}"/>
     </linearGradient>
     <linearGradient id="fl-silver" x1="0" y1="0" x2="0" y2="1">
@@ -136,7 +145,7 @@ function crest() {
   <path d="${textPath(OSWALD_700, "FAZI", 120, 146, 78, 7)}" fill="url(#fl-silver)"/>
   <path d="M50 160h40M150 160h40" stroke="url(#fl-gold)" stroke-width="2" stroke-linecap="round"/>
   <path d="${textPath(OSWALD_500, "LEAGUE", 120, 169.5, 23, 7.5)}" fill="url(#fl-gold)"/>
-  ${heron(120, 173 + 21 * 0.73, 0.73)}`;
+  ${heron(120, 180 + 22 * 0.6, 0.6)}`;
 }
 
 // ─── Versione piccola (favicon): scudo, bordo oro, "F" ───
