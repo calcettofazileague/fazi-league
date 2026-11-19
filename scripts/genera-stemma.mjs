@@ -68,40 +68,35 @@ function shield(i = 0) {
   return `M120 ${f(top)}L${f(240 - side)} ${f(sh)}L${f(240 - side)} ${mid}Q${f(240 - side)} ${f(230 - i * 0.6)} 120 ${f(bot)}Q${f(side)} ${f(230 - i * 0.6)} ${f(side)} ${mid}L${f(side)} ${f(sh)}Z`;
 }
 
-// Airone (simbolo di Fazi) in posa araldica: di fronte, ali aperte, su una zampa sola,
-// testa di profilo rivolta a sinistra. Coordinate locali con lo 0 al centro del corpo;
-// (x, y) = dove va lo 0, k = scala. Ingombro: x da -54 a 54, y da -22 a 80.
+// Airone (simbolo di Fazi): silhouette di profilo rivolta a sinistra, collo a S,
+// ciuffo sulla nuca, piume sul petto, ala chiusa a punta, zampe sottili.
+// Disegnato in un riquadro di circa 270×490 (x 110–380, y 5–492);
+// (x, y) = dove va il punto (258, 5), cioè sopra le zampe; k = scala.
 function heron(x, y, k) {
-  // ala destra: bordo d'attacco liscio, bordo d'uscita a lobi arrotondati (le penne);
-  // la sinistra è la stessa specchiata
-  const edge = [[54, -14], [50.5, -3.5], [45, 5.5], [37.5, 12.5], [28.5, 18.5], [18.5, 23.5], [8, 27.5]];
-  let wing = `M3 17C12 5 30 -6 ${edge[0][0]} ${edge[0][1]}`;
-  for (let n = 1; n < edge.length; n++) {
-    const [ax, ay] = edge[n - 1], [bx, by] = edge[n];
-    const len = Math.hypot(bx - ax, by - ay), depth = n === edge.length - 1 ? 2.2 : 3.4;
-    const cx = (ax + bx) / 2 + ((by - ay) / len) * depth, cy = (ay + by) / 2 - ((bx - ax) / len) * depth;
-    wing += `Q${f(cx)} ${f(cy)} ${bx} ${by}`;
-  }
-  wing += "Z";
-  const coverts = "M8 22C18 12 32 2 48 -8";
-  const body = "M0 16C4.5 18 5.5 27 5 35C4.5 43 2.5 49 0 53C-2.5 49 -4.5 43 -5 35C-5.5 27 -4.5 18 0 16Z";
-  const tail = "M-3.5 49Q0 58 0 60Q0 58 3.5 49Z";
-  const neck = "M0 18C3.5 11 3.5 5 0.6 -0.5C-1.8 -5 -1.2 -9 0.8 -11.5";
-  const head = "M-1.8 -16.4C0.2 -18.6 3.4 -18.2 4.3 -15.6L14 -19.2L4.4 -13.4C3.8 -11.4 1.6 -10.6 -0.4 -11.4L-18 -13Z";
-  const legs = "M1.6 52L1.6 77M-3.6 78.4L1.6 77L6.4 78.4M-1.6 51L-8 59L-2.2 63";
-  const g = 'fill="url(#fl-gold-v)"';
+  const body = [
+    "M110 32L186 21C194 11 211 5 226 9C238 12 244 22 243 34",       // becco, testa
+    "C241 52 236 72 228 90C219 110 212 126 216 140C221 151 232 152 246 148", // collo (dietro)
+    "C285 140 322 168 342 210C358 245 368 290 374 330L381 364",      // schiena, ala
+    "C368 353 352 342 338 330C318 314 300 304 286 300",             // punta dell'ala, coda
+    "C268 297 250 292 236 282C214 266 200 240 192 212",             // pancia, petto
+    "C188 190 190 160 191 132C192 106 194 80 198 60C200 50 199 42 193 38Z", // collo (davanti), gola
+  ].join("");
+  const crest = "M236 20C254 26 272 32 292 34M238 25C254 33 268 41 286 50M234 16C250 18 266 20 282 18";
+  const plumes = "M197 200C193 218 190 236 187 252M202 214C199 230 197 248 196 264M209 228C208 242 208 256 209 270";
+  const wingLine = "M252 168C282 222 310 276 340 334";
+  const legs = "M262 296L258 380L252 468M292 300L294 382L300 468";
+  const toes = "M252 468L204 479M252 468L230 489M252 468L272 486M300 468L262 481M300 468L286 491M300 468L326 484";
+  const g = "url(#fl-gold-v)";
   return `
-  <g transform="translate(${f(x)} ${f(y)}) scale(${k})">
-    <path d="${legs}" stroke="url(#fl-gold-v)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-    <path d="${wing}" ${g}/>
-    <path d="${wing}" ${g} transform="scale(-1 1)"/>
-    <path d="${coverts}" stroke="${C.green2}" stroke-width="1" stroke-linecap="round" fill="none" opacity=".4"/>
-    <path d="${coverts}" stroke="${C.green2}" stroke-width="1" stroke-linecap="round" fill="none" opacity=".4" transform="scale(-1 1)"/>
-    <path d="${tail}" ${g}/>
-    <path d="${body}" ${g}/>
-    <path d="${neck}" stroke="url(#fl-gold-v)" stroke-width="3.4" stroke-linecap="round" fill="none"/>
-    <path d="${head}" ${g}/>
-    <circle cx="0.9" cy="-15.2" r="0.95" fill="${C.green2}"/>
+  <g transform="translate(${f(x - 258 * k)} ${f(y - 5 * k)}) scale(${k})">
+    <path d="${legs}" stroke="${g}" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <path d="${toes}" stroke="${g}" stroke-width="5.5" stroke-linecap="round" fill="none"/>
+    <circle cx="258" cy="380" r="6.5" fill="${g}"/><circle cx="294" cy="382" r="6.5" fill="${g}"/>
+    <path d="${crest}" stroke="${g}" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+    <path d="${plumes}" stroke="${g}" stroke-width="4" stroke-linecap="round" fill="none"/>
+    <path d="${body}" fill="${g}"/>
+    <path d="${wingLine}" stroke="${C.green2}" stroke-width="5" stroke-linecap="round" fill="none" opacity=".35"/>
+    <circle cx="207" cy="20" r="4" fill="${C.green2}"/>
   </g>`;
 }
 
@@ -116,7 +111,7 @@ const defs = `
     <linearGradient id="fl-rim" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="${C.gold1}"/><stop offset=".55" stop-color="${C.gold2}"/><stop offset="1" stop-color="${C.gold3}"/>
     </linearGradient>
-    <linearGradient id="fl-gold-v" x1="0" y1="-22" x2="0" y2="80" gradientUnits="userSpaceOnUse">
+    <linearGradient id="fl-gold-v" x1="0" y1="0" x2="0" y2="495" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="${C.gold1}"/><stop offset=".6" stop-color="${C.gold2}"/><stop offset="1" stop-color="${C.gold3}"/>
     </linearGradient>
     <linearGradient id="fl-silver" x1="0" y1="0" x2="0" y2="1">
@@ -145,7 +140,7 @@ function crest() {
   <path d="${textPath(OSWALD_700, "FAZI", 120, 146, 78, 7)}" fill="url(#fl-silver)"/>
   <path d="M50 160h40M150 160h40" stroke="url(#fl-gold)" stroke-width="2" stroke-linecap="round"/>
   <path d="${textPath(OSWALD_500, "LEAGUE", 120, 169.5, 23, 7.5)}" fill="url(#fl-gold)"/>
-  ${heron(120, 180 + 22 * 0.6, 0.6)}`;
+  ${heron(120, 173, 0.15)}`;
 }
 
 // ─── Versione piccola (favicon): scudo, bordo oro, "F" ───
