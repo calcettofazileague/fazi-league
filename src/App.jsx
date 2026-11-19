@@ -326,6 +326,110 @@ function SectionHead({ title, sub, children }) {
   );
 }
 
+// ─── CARD GIOCATORE ───
+// Metallo diverso per livello; la maglia al centro è sempre quella della Fazi League.
+const CARD_THEMES = {
+  ROOKIE: {
+    frame: "linear-gradient(135deg, #5c3216 0%, #e0a26a 38%, #8a4b22 62%, #f0bd8c 100%)",
+    body: "linear-gradient(165deg, #d38c55 0%, #9a5a2e 55%, #5e3216 100%)",
+    text: "#fff4ea", accent: "#ffd7b0", line: "rgba(255,235,215,0.35)", shine: false,
+  },
+  VETERANO: {
+    frame: "linear-gradient(135deg, #4b5563 0%, #f8fafc 38%, #9ca3af 62%, #e5e7eb 100%)",
+    body: "linear-gradient(165deg, #f1f5f9 0%, #b6bdc8 55%, #6b7280 100%)",
+    text: "#111827", accent: "#374151", line: "rgba(17,24,39,0.25)", shine: false,
+  },
+  ELITE: {
+    frame: "linear-gradient(135deg, #7c2d12 0%, #fde68a 38%, #b45309 62%, #fef3c7 100%)",
+    body: "linear-gradient(165deg, #fef08a 0%, #eab308 50%, #a16207 100%)",
+    text: "#2b1900", accent: "#5c3b00", line: "rgba(43,25,0,0.28)", shine: true,
+  },
+  LEGGENDA: {
+    frame: "linear-gradient(135deg, #4c1d95 0%, #c4b5fd 30%, #22d3ee 50%, #f0abfc 70%, #7c3aed 100%)",
+    body: "linear-gradient(165deg, #2e1065 0%, #1e1b4b 50%, #0b0b1a 100%)",
+    text: "#f5f3ff", accent: "#c4b5fd", line: "rgba(196,181,253,0.35)", shine: true,
+  },
+};
+const FOOT_SHORT = { Destro: "DX", Sinistro: "SX", Ambidestro: "AMB" };
+const CARD_CLIP = "polygon(16px 0, calc(100% - 16px) 0, 100% 16px, 100% calc(100% - 30px), 50% 100%, 0 calc(100% - 30px), 0 16px)";
+
+function PlayerCard({ p, tier, winRate, ovr, adminMode, mine, onOpen, onDelete }) {
+  const t = CARD_THEMES[tier.name] || CARD_THEMES.ROOKIE;
+  const nameSize = p.nickname.length > 12 ? 15 : p.nickname.length > 9 ? 18 : 21;
+  const num = String(p.numero || "?");
+  const stats = [["PRE", p.presences], ["VIT", p.wins], ["PAR", p.draws], ["SCO", p.losses], ["MVP", p.mvps], ["%V", winRate]];
+  const bio = [p.eta > 0 && `${p.eta} anni`, p.altezza > 0 && `${p.altezza} cm`, p.peso > 0 && `${p.peso} kg`].filter(Boolean);
+  return (
+    <div style={{ width: 196, flexShrink: 0, position: "relative", cursor: adminMode || mine ? "pointer" : "default" }} onClick={onOpen}>
+      <div style={{ filter: "drop-shadow(0 10px 18px rgba(0,0,0,0.55))" }}>
+        <div style={{ position: "relative", height: 322, clipPath: CARD_CLIP, background: t.frame }}>
+          <div style={{ position: "absolute", inset: 4, clipPath: CARD_CLIP, background: t.body, color: t.text, overflow: "hidden" }}>
+            {/* trama e riflesso */}
+            <div style={{ position: "absolute", inset: 0, backgroundImage: "repeating-linear-gradient(135deg, rgba(255,255,255,0.07) 0 2px, transparent 2px 9px)" }} />
+            <div className={t.shine ? "fl-card-shine" : undefined} style={{ position: "absolute", inset: 0, backgroundImage: "linear-gradient(115deg, transparent 35%, rgba(255,255,255,0.32) 48%, transparent 60%)", backgroundSize: "260% 100%", backgroundPosition: "100% 0", mixBlendMode: "soft-light" }} />
+
+            {/* in alto: ruolo e piede a sinistra, stemma e livello a destra */}
+            <div style={{ position: "relative", display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "14px 14px 0" }}>
+              <div style={{ textAlign: "center", lineHeight: 1 }}>
+                <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 26, fontWeight: 700, letterSpacing: 1 }}>{p.ruolo || "ATT"}</div>
+                <div style={{ height: 1, background: t.line, margin: "5px 2px" }} />
+                <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: 12, letterSpacing: 1.5, color: t.accent }}>{FOOT_SHORT[p.piede] || "—"}</div>
+              </div>
+              <Stemma size={30} />
+            </div>
+
+            {/* maglia con il numero */}
+            <svg viewBox="0 0 120 104" width="118" height="102" style={{ position: "relative", display: "block", margin: "-14px auto 0" }} aria-hidden="true">
+              <defs>
+                <linearGradient id={`shirt-${p.key}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stopColor="#1f5a3a" /><stop offset="1" stopColor="#0b2216" />
+                </linearGradient>
+              </defs>
+              <path d="M39 6L15 17L4 43L22 51L27 41V100H93V41L98 51L116 43L105 17L81 6C77 14 69 18 60 18S43 14 39 6Z" fill={`url(#shirt-${p.key})`} stroke="#eab308" strokeWidth="1.6" strokeLinejoin="round" />
+              <path d="M39 6C43 14 51 18 60 18S77 14 81 6" fill="none" stroke="#fde68a" strokeWidth="2.4" />
+              <path d="M6.5 37.5L23 45M113.5 37.5L97 45" stroke="#eab308" strokeWidth="2" />
+              <text x="60" y="81" textAnchor="middle" fontFamily="Oswald, sans-serif" fontSize={num.length > 2 ? 34 : 46} fontWeight="700" fill="#fde68a" stroke="#0b2216" strokeWidth="0.6">{num}</text>
+            </svg>
+
+            {/* nome */}
+            <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 8, padding: "4px 12px 0" }}>
+              <div style={{ flex: 1, height: 1, background: t.line }} />
+              <div style={{ fontFamily: "'Oswald', sans-serif", fontSize: nameSize, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", whiteSpace: "nowrap", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis" }}>{p.nickname}</div>
+              <div style={{ flex: 1, height: 1, background: t.line }} />
+            </div>
+
+            {/* statistiche */}
+            <div style={{ position: "relative", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", rowGap: 2, padding: "6px 16px 0" }}>
+              {stats.map(([lbl, val]) => (
+                <div key={lbl} style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: 4 }}>
+                  <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 17, fontWeight: 700 }}>{val}</span>
+                  <span style={{ fontFamily: "'Oswald', sans-serif", fontSize: 9, letterSpacing: 1, color: t.accent }}>{lbl}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* dati fisici (e OVR per l'admin) */}
+            <div style={{ position: "relative", textAlign: "center", fontSize: 9.5, letterSpacing: 0.8, color: t.accent, fontFamily: "'Oswald', sans-serif", marginTop: 5 }}>
+              {bio.join(" · ") || " "}
+              {adminMode && <span style={{ marginLeft: 6, padding: "0 5px", borderRadius: 4, background: "rgba(0,0,0,0.35)", color: "#fde68a" }}>OVR {ovr}</span>}
+            </div>
+
+            {/* livello, nella punta della card */}
+            <div style={{ position: "absolute", left: 0, right: 0, bottom: 14, textAlign: "center", fontFamily: "'Oswald', sans-serif", fontSize: 9, fontWeight: 600, letterSpacing: 2.5, color: t.accent }}>
+              ★ {tier.name} ★
+            </div>
+          </div>
+        </div>
+      </div>
+      {adminMode && (
+        <button onClick={(e) => { e.stopPropagation(); onDelete(); }} style={{ ...S.cardDelete, top: -4, right: -4 }}>✕</button>
+      )}
+      {adminMode && <div style={{ textAlign: "center", fontSize: 10, color: "#eab308", marginTop: 8, fontFamily: "'Oswald', sans-serif", letterSpacing: 1 }}>Tocca per modificare</div>}
+      {!adminMode && mine && <div style={{ textAlign: "center", fontSize: 10, color: "#4ade80", marginTop: 8, fontFamily: "'Oswald', sans-serif", letterSpacing: 1 }}>Tocca per aggiornare la tua card</div>}
+    </div>
+  );
+}
+
 const EMPTY_PROFILE = { nickname: "", numero: "", ruolo: "ATT", eta: "", altezza: "", peso: "", piede: "Destro", origKey: null };
 
 // ═══════════════════════════════════════════════════════════
@@ -1558,7 +1662,7 @@ export default function App() {
           <SectionHead title="CARRIERE" sub="Le card dei giocatori">
             <button onClick={() => openProfileEditor(adminMode ? "" : playerName)} style={{ ...S.actionBtn, ...S.actionPrimary, flexShrink: 0 }}>+ CREA PROFILO</button>
           </SectionHead>
-          <div style={{ display: "flex", gap: 16, overflowX: "auto", padding: "0 0 20px", WebkitOverflowScrolling: "touch" }}>
+          <div style={{ display: "flex", gap: 16, overflowX: "auto", padding: "8px 6px 24px", margin: "0 -6px", WebkitOverflowScrolling: "touch" }}>
             {Object.entries(players)
               .filter(([, data]) => data)
               .map(([key, data]) => {
@@ -1573,50 +1677,10 @@ export default function App() {
                 const winRate = p.presences > 0 ? Math.round((p.wins / p.presences) * 100) : 0;
                 const mine = norm(p.nickname) === myName;
                 return (
-                  <div key={p.key}
-                    style={{ width: 190, borderRadius: 14, overflow: "hidden", border: `2px solid ${tier.color}`, background: "#0c0c0c", flexShrink: 0, position: "relative", boxShadow: "0 8px 24px rgba(0,0,0,0.4)", cursor: adminMode || mine ? "pointer" : "default" }}
-                    onClick={() => (adminMode ? startEditingPlayerStats(p.nickname) : mine && openProfileEditor(p.nickname))}>
-                    {adminMode && (
-                      <button onClick={(e) => { e.stopPropagation(); handleDeletePlayer(p.key, p.nickname); }} style={S.cardDelete}>✕</button>
-                    )}
-                    <div style={{ backgroundImage: tier.gradient, position: "relative", height: 200, overflow: "hidden" }}>
-                      <div style={{ position: "absolute", inset: 0, backgroundImage: "repeating-linear-gradient(180deg, transparent, transparent 2px, rgba(255,255,255,0.03) 2px, rgba(255,255,255,0.03) 4px)", pointerEvents: "none" }} />
-                      <div style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", width: 50, height: 16, borderRadius: "0 0 25px 25px", background: "rgba(0,0,0,0.25)" }} />
-                      <div style={{ position: "absolute", top: 14, left: 0, width: "30%", height: 2, background: "rgba(0,0,0,0.12)" }} />
-                      <div style={{ position: "absolute", top: 14, right: 0, width: "30%", height: 2, background: "rgba(0,0,0,0.12)" }} />
-                      <div style={{ position: "absolute", top: 8, right: adminMode ? 34 : 8, background: "rgba(0,0,0,0.4)", borderRadius: 6, padding: "2px 8px", fontSize: 10, fontFamily: "'Oswald',sans-serif", letterSpacing: 2, color: "#fff", zIndex: 2 }}>{p.ruolo || "ATT"}</div>
-                      <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(0,0,0,0.4)", borderRadius: 6, padding: "2px 8px", fontSize: 8, fontFamily: "'Oswald',sans-serif", letterSpacing: 2, color: "rgba(255,255,255,0.7)", zIndex: 2 }}>{tier.name}</div>
-                      <div style={{ position: "absolute", top: 30, left: 0, right: 0, textAlign: "center", zIndex: 1 }}>
-                        <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: p.nickname.length > 10 ? 13 : 17, fontWeight: 800, letterSpacing: 3, color: "#fff", textTransform: "uppercase", textShadow: "0 2px 4px rgba(0,0,0,0.3)", padding: "0 8px", wordBreak: "break-word", lineHeight: 1.2 }}>{p.nickname}</div>
-                      </div>
-                      <div style={{ position: "absolute", top: 55, left: 0, right: 0, textAlign: "center", zIndex: 1 }}>
-                        <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 74, fontWeight: 800, color: "#fff", lineHeight: 1, textShadow: "0 3px 8px rgba(0,0,0,0.3)", letterSpacing: 4 }}>{p.numero || "?"}</div>
-                      </div>
-                      <div style={{ position: "absolute", bottom: 8, left: 0, right: 0, display: "flex", justifyContent: "center", gap: 4, zIndex: 1, flexWrap: "wrap", padding: "0 6px" }}>
-                        {p.eta > 0 && <span style={S.cardChip}>{p.eta}y</span>}
-                        {p.altezza > 0 && <span style={S.cardChip}>{p.altezza}cm</span>}
-                        {p.peso > 0 && <span style={S.cardChip}>{p.peso}kg</span>}
-                        {p.piede && <span style={S.cardChip}>🦶{p.piede[0]}</span>}
-                        {adminMode && <span style={{ ...S.cardChip, color: "#fde68a" }}>OVR {ovrOf(p.nickname)}</span>}
-                      </div>
-                    </div>
-                    <div style={{ padding: "8px 6px 4px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 3 }}>
-                      {[["PRE", p.presences, "#4ade80"], ["MVP", p.mvps, "#eab308"], ["VIT", p.wins, "#16a34a"], ["SCO", p.losses, "#f87171"]].map(([lbl, val, col]) => (
-                        <div key={lbl} style={{ background: "rgba(255,255,255,0.04)", borderRadius: 5, padding: "3px 0", textAlign: "center" }}>
-                          <span style={{ fontFamily: "'Oswald',sans-serif", fontSize: 14, fontWeight: 700, color: col, display: "block" }}>{val}</span>
-                          <span style={{ fontSize: 7, fontFamily: "'Oswald',sans-serif", letterSpacing: 1, color: "#64748b" }}>{lbl}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div style={{ padding: "0 6px 8px" }}>
-                      <div style={{ background: "rgba(255,255,255,0.06)", borderRadius: 3, height: 5, overflow: "hidden" }}>
-                        <div style={{ height: "100%", borderRadius: 3, background: "linear-gradient(90deg, #16a34a, #4ade80)", width: `${winRate}%` }} />
-                      </div>
-                      <div style={{ textAlign: "center", fontSize: 8, color: "#64748b", fontFamily: "'Oswald',sans-serif", marginTop: 2, letterSpacing: 1 }}>{winRate}% WIN</div>
-                    </div>
-                    {adminMode && <div style={{ textAlign: "center", fontSize: 9, color: "#eab308", padding: "0 0 6px", fontFamily: "'Oswald',sans-serif" }}>Tocca per modificare</div>}
-                    {!adminMode && mine && <div style={{ textAlign: "center", fontSize: 9, color: "#4ade80", padding: "0 0 6px", fontFamily: "'Oswald',sans-serif" }}>Tocca per aggiornare la tua card</div>}
-                  </div>
+                  <PlayerCard key={p.key} p={p} tier={tier} winRate={winRate} ovr={adminMode ? ovrOf(p.nickname) : null}
+                    adminMode={adminMode} mine={mine}
+                    onOpen={() => (adminMode ? startEditingPlayerStats(p.nickname) : mine && openProfileEditor(p.nickname))}
+                    onDelete={() => handleDeletePlayer(p.key, p.nickname)} />
                 );
               })}
           </div>
@@ -2177,7 +2241,6 @@ const S = {
   awardCard: { background: "rgba(255,255,255,0.04)", borderRadius: 14, padding: 16, display: "flex", flexDirection: "column", gap: 4, border: "1px solid rgba(255,255,255,0.06)" },
   histCard: { background: "rgba(255,255,255,0.04)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.06)", padding: 16, marginBottom: 12 },
   histTeam: { background: "rgba(255,255,255,0.03)", borderRadius: 8, padding: "8px 10px", color: "#e2e8f0", lineHeight: 1.6 },
-  cardChip: { fontSize: 8, color: "rgba(255,255,255,0.6)", fontFamily: "'Oswald',sans-serif", background: "rgba(0,0,0,0.25)", borderRadius: 4, padding: "1px 5px" },
   cardDelete: { position: "absolute", top: 6, right: 6, background: "#dc2626", border: "none", color: "#fff", width: 24, height: 24, borderRadius: "50%", cursor: "pointer", fontSize: 13, fontWeight: "bold", zIndex: 10, display: "flex", alignItems: "center", justifyContent: "center" },
   byTag: { marginLeft: 8, fontSize: 10, color: "#fcd34d", background: "rgba(245,158,11,0.12)", borderRadius: 4, padding: "1px 6px", fontWeight: 600, whiteSpace: "nowrap" },
   logRow: { display: "flex", gap: 8, alignItems: "baseline", padding: "8px 4px", borderBottom: "1px solid rgba(255,255,255,0.04)", fontSize: 13, flexWrap: "wrap" },

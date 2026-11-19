@@ -25,3 +25,8 @@ input::placeholder {
   .fl-vs-row { flex-direction: column; align-items: stretch !important; gap: 8px !important; }
   .fl-vs-row > .fl-vs { width: 40px !important; height: 40px !important; margin: 0 auto; }
 }
+
+/* Card giocatori Elite e Leggenda: riflesso che scorre */
+@keyframes fl-sheen { 0%, 55% { background-position: 100% 0; } 100% { background-position: -60% 0; } }
+.fl-card-shine { animation: fl-sheen 4.5s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .fl-card-shine { animation: none; } }
