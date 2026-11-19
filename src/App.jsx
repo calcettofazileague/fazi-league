@@ -265,6 +265,13 @@ const uiAsk = (opts) =>
 const uiConfirm = (text, opts = {}) => uiAsk({ ...opts, text });
 const uiPrompt = (text, value = "", opts = {}) => uiAsk({ ...opts, text, input: true, value });
 
+// Installazione sulla schermata Home
+const UA = typeof navigator !== "undefined" ? navigator.userAgent : "";
+const IS_IOS = /iphone|ipad|ipod/i.test(UA) || (/macintosh/i.test(UA) && typeof navigator !== "undefined" && navigator.maxTouchPoints > 1);
+const IS_ANDROID = /android/i.test(UA);
+const isStandalone = () =>
+  (typeof window !== "undefined" && window.matchMedia?.("(display-mode: standalone)").matches) || window.navigator?.standalone === true;
+
 function logEvent(type, detail) {
   push(ref(db, "logs"), { t: Date.now(), type, detail, dev: DEVICE_ID, me: lsGet("fazi_me") }).catch(() => {});
 }
@@ -323,6 +330,9 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [dialog, setDialog] = useState(null); // conferme/domande dentro l'app
   const dialogRef = useRef(null);
+  const [installEvt, setInstallEvt] = useState(null);   // finestra di installazione di Chrome
+  const [installHelp, setInstallHelp] = useState(false);
+  const [installHidden, setInstallHidden] = useState(() => isStandalone() || lsGet("fazi_install_hide") === "1");
 
   const autocompleteRef = useRef(null);
   const toastTimer = useRef(null);
@@ -351,6 +361,26 @@ export default function App() {
     };
     return () => { openDialog = null; };
   }, []);
+
+  useEffect(() => {
+    const onPrompt = (e) => { e.preventDefault(); setInstallEvt(e); };
+    const onInstalled = () => { setInstallEvt(null); setInstallHidden(true); };
+    window.addEventListener("beforeinstallprompt", onPrompt);
+    window.addEventListener("appinstalled", onInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onPrompt);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
+  }, []);
+
+  const installApp = async () => {
+    if (!installEvt) return setInstallHelp(true);
+    installEvt.prompt();
+    try { await installEvt.userChoice; } catch { /* ignorato */ }
+    setInstallEvt(null);
+  };
+
+  const hideInstall = () => { lsSet("fazi_install_hide", "1"); setInstallHidden(true); };
 
   const closeDialog = (ok) => {
     const d = dialogRef.current;
@@ -1162,6 +1192,15 @@ export default function App() {
         <p style={S.subtitle}>Settimana {formatDate(weekDates.monday)} – {formatDate(weekDates.friday)}</p>
       </div>
 
+      {!installHidden && (installEvt || IS_IOS || IS_ANDROID) && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, maxWidth: 520, width: "calc(100% - 32px)", boxSizing: "border-box", margin: "0 auto 16px", padding: "10px 12px 10px 14px", borderRadius: 14, background: "rgba(22,163,74,0.12)", border: "1px solid rgba(22,163,74,0.35)", position: "relative", zIndex: 1 }}>
+          <span style={{ fontSize: 20 }}>📲</span>
+          <span style={{ flex: 1, fontSize: 14, color: "#e2e8f0", lineHeight: 1.3 }}>Metti Fazi League sulla schermata Home, come un'app</span>
+          <button onClick={installApp} style={{ ...S.saveBtn, padding: "8px 14px", fontSize: 13 }}>INSTALLA</button>
+          <button onClick={hideInstall} aria-label="Chiudi" style={{ background: "none", border: "none", color: "#64748b", fontSize: 18, cursor: "pointer", padding: "0 2px" }}>✕</button>
+        </div>
+      )}
+
       {/* TABS */}
       <div style={S.tabBar}>
         {[
@@ -1904,6 +1943,31 @@ export default function App() {
       )}
 
       {/* ═══ MODALE: PIN ADMIN ═══ */}
+      {installHelp && (
+        <div style={{ ...S.overlay, zIndex: 900, alignItems: "center" }} onClick={() => setInstallHelp(false)}>
+          <div style={{ ...S.modal, maxWidth: 400 }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={S.modalTitle}>📲 Installa l'app</h3>
+            {IS_IOS ? (
+              <ol style={{ color: "#cbd5e1", fontSize: 15, lineHeight: 1.6, paddingLeft: 22, margin: "0 0 18px" }}>
+                <li>Apri questa pagina in <b>Safari</b></li>
+                <li>Tocca <b>Condividi</b> (il quadrato con la freccia ⬆︎)</li>
+                <li>Scegli <b>Aggiungi alla schermata Home</b></li>
+              </ol>
+            ) : (
+              <ol style={{ color: "#cbd5e1", fontSize: 15, lineHeight: 1.6, paddingLeft: 22, margin: "0 0 18px" }}>
+                <li>Se l'hai aperta da WhatsApp, prima tocca <b>⋮</b> → <b>Apri in Chrome</b></li>
+                <li>In Chrome tocca il menu <b>⋮</b> in alto a destra</li>
+                <li>Scegli <b>Aggiungi a schermata Home</b> (o <b>Installa app</b>)</li>
+                <li>Se te lo chiede, scegli <b>Installa</b></li>
+              </ol>
+            )}
+            <div style={{ display: "flex", justifyContent: "center" }}>
+              <button onClick={() => setInstallHelp(false)} style={S.saveBtn}>HO CAPITO</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {dialog && (
         <div style={{ ...S.overlay, zIndex: 900, alignItems: "center" }} onClick={() => closeDialog(false)}>
           <div style={{ ...S.modal, maxWidth: 380 }} onClick={(e) => e.stopPropagation()}>
