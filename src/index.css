@@ -6,13 +6,9 @@
 
 body {
   font-family: 'Source Sans 3', sans-serif;
-  background: #0a1628;
+  background: #080808;
   color: #e2e8f0;
   -webkit-font-smoothing: antialiased;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
 }
 
 @keyframes slideIn {
@@ -22,4 +18,10 @@ body {
 
 input::placeholder {
   color: #64748b;
+}
+
+/* Squadre: su schermi stretti le due squadre una sotto l'altra, con il VS in mezzo */
+@media (max-width: 560px) {
+  .fl-vs-row { flex-direction: column; align-items: stretch !important; gap: 8px !important; }
+  .fl-vs-row > .fl-vs { width: 40px !important; height: 40px !important; margin: 0 auto; }
 }

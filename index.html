@@ -5,9 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Fazi League</title>
     <meta name="description" content="Iscrizioni, squadre e statistiche del calcetto" />
-    <meta name="theme-color" content="#0a1628" />
+    <meta name="theme-color" content="#080808" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
+    <link rel="preload" href="/stemma.svg" as="image" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -16,9 +18,19 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet" />
+    <style>
+      /* Schermata di avvio: compare subito, prima che l'app sia scaricata.
+         L'app usa la stessa classe mentre aspetta i dati, così non c'è nessuno stacco. */
+      html, body { background: #080808; }
+      .fl-splash { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; min-height: 100vh; min-height: 100dvh; background: radial-gradient(circle at 50% 42%, rgba(22,163,74,0.14), transparent 60%), #080808; }
+      .fl-splash img { width: 129px; height: 150px; animation: fl-pulse 1.8s ease-in-out infinite; }
+      .fl-splash p { margin: 0; color: #94a3b8; font: 500 14px/1 'Oswald', 'Arial Narrow', sans-serif; letter-spacing: 4px; text-transform: uppercase; }
+      @keyframes fl-pulse { 0%, 100% { transform: scale(1); filter: drop-shadow(0 0 0 rgba(234,179,8,0)); } 50% { transform: scale(1.04); filter: drop-shadow(0 0 18px rgba(234,179,8,0.35)); } }
+      @media (prefers-reduced-motion: reduce) { .fl-splash img { animation: none; } }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div class="fl-splash"><img src="/stemma.svg" alt="Fazi League" /><p>Caricamento…</p></div></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 280">
+  <defs>
+    <linearGradient id="fl-field" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1f4a33"/><stop offset="1" stop-color="#0b1d14"/>
+    </linearGradient>
+    <linearGradient id="fl-gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fde68a"/><stop offset=".5" stop-color="#eab308"/><stop offset="1" stop-color="#b45309"/>
+    </linearGradient>
+    <linearGradient id="fl-rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fde68a"/><stop offset=".55" stop-color="#eab308"/><stop offset="1" stop-color="#b45309"/>
+    </linearGradient>
+    <linearGradient id="fl-gold-v" x1="0" y1="0" x2="0" y2="495" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fde68a"/><stop offset=".6" stop-color="#eab308"/><stop offset="1" stop-color="#b45309"/>
+    </linearGradient>
+    <linearGradient id="fl-silver" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f8fafc"/><stop offset="1" stop-color="#94a3b8"/>
+    </linearGradient>
+    <clipPath id="fl-inner"><path d="M120 18.35L209 58.95L209 160Q209 224.6 120 260.75Q31 224.6 31 160L31 58.95Z"/></clipPath>
+  </defs>
+  <path d="M120 8L218 54L218 160Q218 230 120 272Q22 230 22 160L22 54Z" fill="url(#fl-rim)"/>
+  <path d="M120 26.4L202 62.8L202 160Q202 220.4 120 252Q38 220.4 38 160L38 62.8Z" fill="url(#fl-field)"/>
+  <path d="M123.30 205L96.45 205L96.45 83.50L148.95 83.50L148.95 101.65L123.30 101.65L123.30 132.25L145.65 132.25L145.65 151L123.30 151" fill="url(#fl-silver)"/>
+</svg>
