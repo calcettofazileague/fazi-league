@@ -289,6 +289,43 @@ function ScorePicker({ label, value, onChange }) {
   );
 }
 
+// Stemma: un solo disegno per tutta l'app (intestazione, caricamento, icone, favicon).
+// Il file public/stemma.svg è generato da scripts/genera-stemma.mjs: modificare lì.
+const STEMMA_RATIO = 240 / 280;
+function Stemma({ size = 120, style }) {
+  return (
+    <img src="/stemma.svg" alt="Fazi League" width={Math.round(size * STEMMA_RATIO)} height={size}
+      draggable={false} style={{ display: "block", userSelect: "none", WebkitUserDrag: "none", ...style }} />
+  );
+}
+
+// Icone delle schede: stesso tratto per tutte (al posto delle emoji, che cambiano da telefono a telefono)
+const TAB_ICONS = {
+  signup: <><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 2.5h6v3.5H9z" /><path d="M8.5 13.5l2.5 2.5 4.5-5" /></>,
+  teams: <path d="M8.5 3L3 6.2l2 4.3 2.2-1V21h9.6V9.5l2.2 1 2-4.3L15.5 3c-.4 1.9-1.8 3-3.5 3S8.9 4.9 8.5 3z" />,
+  careers: <><rect x="5" y="2.5" width="14" height="19" rx="2" /><circle cx="12" cy="9.5" r="3" /><path d="M7.8 18c.8-2.3 2.3-3.4 4.2-3.4s3.4 1.1 4.2 3.4" /></>,
+  stats: <><path d="M2.5 21h19" /><rect x="3.5" y="13" width="5.5" height="8" /><rect x="9.25" y="7.5" width="5.5" height="13.5" /><rect x="15" y="15.5" width="5.5" height="5.5" /></>,
+  history: <><path d="M7.5 3.5h9V9a4.5 4.5 0 0 1-9 0V3.5z" /><path d="M7.5 5.5H4.5a3.5 3.5 0 0 0 3.6 4.4M16.5 5.5h3a3.5 3.5 0 0 1-3.6 4.4" /><path d="M12 13.5V17M8 21h8M9.5 17h5" /></>,
+};
+const TabIcon = ({ id }) => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    {TAB_ICONS[id]}
+  </svg>
+);
+
+// Intestazione uguale per tutte le pagine: titolo, eventuale descrizione e pulsante a destra
+function SectionHead({ title, sub, children }) {
+  return (
+    <div style={S.sectionHead}>
+      <div style={{ minWidth: 0 }}>
+        <h2 style={S.sectionTitle}>{title}</h2>
+        {sub && <p style={S.sectionSub}>{sub}</p>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
 const EMPTY_PROFILE = { nickname: "", numero: "", ruolo: "ATT", eta: "", altezza: "", peso: "", piede: "Destro", origKey: null };
 
 // ═══════════════════════════════════════════════════════════
@@ -1128,9 +1165,10 @@ export default function App() {
 
   if (loading) {
     return (
-      <div style={S.loadWrap}>
-        <div style={S.spinner} />
-        <p style={S.loadText}>Caricamento...</p>
+      // stessa schermata di index.html (classe .fl-splash): dall'avvio ai dati senza stacchi
+      <div className="fl-splash">
+        <Stemma size={150} />
+        <p>Caricamento…</p>
       </div>
     );
   }
@@ -1157,44 +1195,16 @@ export default function App() {
       )}
 
       {/* HEADER */}
-      <div style={{ position: "relative", zIndex: 1, textAlign: "center", padding: "32px 20px 16px", display: "flex", flexDirection: "column", alignItems: "center" }}>
-        <div onClick={handleTitleClick} style={{ cursor: "pointer", userSelect: "none" }}>
-          <svg width="140" height="164" viewBox="0 0 240 280" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <linearGradient id="shieldGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#1a3a2a" /><stop offset="100%" stopColor="#0a1a12" />
-              </linearGradient>
-              <linearGradient id="goldGrad" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stopColor="#fbbf24" /><stop offset="50%" stopColor="#eab308" /><stop offset="100%" stopColor="#ca8a04" />
-              </linearGradient>
-              <linearGradient id="goldStroke" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#fde68a" /><stop offset="100%" stopColor="#b45309" />
-              </linearGradient>
-              <linearGradient id="silverGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#e2e8f0" /><stop offset="100%" stopColor="#94a3b8" />
-              </linearGradient>
-            </defs>
-            <path d="M120 8 L218 55 L218 160 Q218 230 120 272 Q22 230 22 160 L22 55 Z" fill="url(#shieldGrad)" stroke="url(#goldStroke)" strokeWidth="4" />
-            <path d="M120 20 L208 62 L208 158 Q208 222 120 260 Q32 222 32 158 L32 62 Z" fill="none" stroke="url(#goldGrad)" strokeWidth="1.5" opacity="0.4" />
-            <path d="M55 58 Q120 35 185 58" stroke="url(#goldGrad)" strokeWidth="2" fill="none" />
-            <path d="M65 66 Q120 46 175 66" stroke="url(#goldGrad)" strokeWidth="1" fill="none" opacity="0.4" />
-            <polygon points="90,55 93,47 96,55 89,50 97,50" fill="url(#goldGrad)" />
-            <polygon points="117,55 120,47 123,55 116,50 124,50" fill="url(#goldGrad)" />
-            <polygon points="144,55 147,47 150,55 143,50 151,50" fill="url(#goldGrad)" />
-            <text x="120" y="138" textAnchor="middle" fontFamily="Oswald, sans-serif" fontSize="72" fontWeight="700" letterSpacing="8" fill="url(#silverGrad)">FAZI</text>
-            <line x1="48" y1="152" x2="98" y2="152" stroke="url(#goldGrad)" strokeWidth="1.5" />
-            <line x1="142" y1="152" x2="192" y2="152" stroke="url(#goldGrad)" strokeWidth="1.5" />
-            <text x="120" y="178" textAnchor="middle" fontFamily="Oswald, sans-serif" fontSize="26" fontWeight="400" letterSpacing="10" fill="url(#goldGrad)">LEAGUE</text>
-            <path d="M70 200 Q120 215 170 200" stroke="url(#goldGrad)" strokeWidth="1.2" fill="none" opacity="0.4" />
-            <path d="M85 210 Q120 220 155 210" stroke="url(#goldGrad)" strokeWidth="0.8" fill="none" opacity="0.3" />
-          </svg>
+      <div style={S.header}>
+        <div onClick={handleTitleClick} style={{ cursor: "pointer", userSelect: "none", WebkitTapHighlightColor: "transparent" }}>
+          <Stemma size={150} />
         </div>
         <p style={S.subtitle}>Settimana {formatDate(weekDates.monday)} – {formatDate(weekDates.friday)}</p>
       </div>
 
       {!installHidden && (installEvt || IS_IOS || IS_ANDROID) && (
         <div style={{ display: "flex", alignItems: "center", gap: 10, maxWidth: 520, width: "calc(100% - 32px)", boxSizing: "border-box", margin: "0 auto 16px", padding: "10px 12px 10px 14px", borderRadius: 14, background: "rgba(22,163,74,0.12)", border: "1px solid rgba(22,163,74,0.35)", position: "relative", zIndex: 1 }}>
-          <span style={{ fontSize: 20 }}>📲</span>
+          <img src="/apple-touch-icon.png" alt="" width={36} height={36} style={{ borderRadius: 9, flexShrink: 0, boxShadow: "0 2px 8px rgba(0,0,0,0.35)" }} />
           <span style={{ flex: 1, fontSize: 14, color: "#e2e8f0", lineHeight: 1.3 }}>Metti Fazi League sulla schermata Home, come un'app</span>
           <button onClick={installApp} style={{ ...S.saveBtn, padding: "8px 14px", fontSize: 13 }}>INSTALLA</button>
           <button onClick={hideInstall} aria-label="Chiudi" style={{ background: "none", border: "none", color: "#64748b", fontSize: 18, cursor: "pointer", padding: "0 2px" }}>✕</button>
@@ -1204,14 +1214,14 @@ export default function App() {
       {/* TABS */}
       <div style={S.tabBar}>
         {[
-          { id: "signup", label: "ISCRIZIONI", icon: "📋" },
-          { id: "teams", label: "SQUADRE", icon: "⚔️" },
-          { id: "careers", label: "CARRIERE", icon: "🎖️" },
-          { id: "stats", label: "PRESENZE", icon: "🏃" },
-          { id: "history", label: "STORICO", icon: "🏆" },
+          { id: "signup", label: "ISCRIZIONI" },
+          { id: "teams", label: "SQUADRE" },
+          { id: "careers", label: "CARRIERE" },
+          { id: "stats", label: "PRESENZE" },
+          { id: "history", label: "STORICO" },
         ].map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)} style={{ ...S.tabBtn, ...(tab === t.id ? S.tabActive : {}) }}>
-            <span style={{ fontSize: 16 }}>{t.icon}</span>
+            <TabIcon id={t.id} />
             <span style={S.tabLabel}>{t.label}</span>
           </button>
         ))}
@@ -1220,9 +1230,7 @@ export default function App() {
       {/* ═══ TAB: ISCRIZIONI ═══ */}
       {tab === "signup" && (
         <div style={S.content}>
-          <p style={{ textAlign: "center", color: "#64748b", fontSize: 13, marginBottom: 16 }}>
-            ⏰ Partite alle <strong style={{ color: "#e2e8f0" }}>{TIME_STR}</strong> — la lista si chiude all'inizio della partita
-          </p>
+          <SectionHead title="ISCRIZIONI" sub={<>Partite alle <strong style={{ color: "#e2e8f0" }}>{TIME_STR}</strong> · la lista si chiude all'inizio della partita</>} />
 
           <div style={S.inputSection}>
             <div style={{ ...S.inputWrap, position: "relative" }} ref={autocompleteRef}>
@@ -1366,6 +1374,7 @@ export default function App() {
       {/* ═══ TAB: SQUADRE ═══ */}
       {tab === "teams" && (
         <div style={S.content}>
+          <SectionHead title="SQUADRE" sub="Squadre bilanciate in automatico sugli iscritti del giorno" />
           <div style={S.dayBtns}>
             {MATCH_DAYS.map((day) => {
               const count = Math.min(daySignups(day.key).length, MAX_PLAYERS);
@@ -1394,7 +1403,7 @@ export default function App() {
               return (
               <div style={S.teamBox}>
                 <div style={{ ...S.teamHeader, background: side === "A" ? "linear-gradient(135deg, rgba(22,163,74,0.2), rgba(22,163,74,0.05))" : "linear-gradient(135deg, rgba(234,179,8,0.2), rgba(234,179,8,0.05))" }}>
-                  <span style={S.teamTitle}>{side === "A" ? "🟢 SQUADRA A" : "🟡 SQUADRA B"}</span>
+                  <span style={S.teamTitle}><span style={{ ...S.teamDot, background: side === "A" ? "#16a34a" : "#eab308" }} />SQUADRA {side}</span>
                   <span style={S.teamPower}>{adminMode ? `OVR ${toOvr(side === "A" ? avgA : avgB)}` : `${names.length} giocatori`}</span>
                 </div>
                 {names.map((n) => (
@@ -1426,9 +1435,9 @@ export default function App() {
                   )}
                 </div>
 
-                <div style={S.teamVsRow}>
+                <div className="fl-vs-row" style={S.teamVsRow}>
                   {renderTeam(A, "A")}
-                  <div style={S.vsCircle}><span style={{ fontSize: 20, fontWeight: 800, fontFamily: "'Oswald', sans-serif", color: "#64748b" }}>VS</span></div>
+                  <div className="fl-vs" style={S.vsCircle}><span style={{ fontSize: 20, fontWeight: 800, fontFamily: "'Oswald', sans-serif", color: "#64748b" }}>VS</span></div>
                   {renderTeam(B, "B")}
                 </div>
 
@@ -1516,10 +1525,9 @@ export default function App() {
       {/* ═══ TAB: CARRIERE ═══ */}
       {tab === "careers" && (
         <div style={S.content}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-            <h2 style={{ fontFamily: "'Oswald', sans-serif", fontSize: 28, letterSpacing: 3, color: "#eab308", margin: 0 }}>CARRIERE</h2>
-            <button onClick={() => openProfileEditor(adminMode ? "" : playerName)} style={{ ...S.actionBtn, ...S.actionPrimary }}>+ CREA PROFILO</button>
-          </div>
+          <SectionHead title="CARRIERE" sub="Le card dei giocatori">
+            <button onClick={() => openProfileEditor(adminMode ? "" : playerName)} style={{ ...S.actionBtn, ...S.actionPrimary, flexShrink: 0 }}>+ CREA PROFILO</button>
+          </SectionHead>
           <div style={{ display: "flex", gap: 16, overflowX: "auto", padding: "0 0 20px", WebkitOverflowScrolling: "touch" }}>
             {Object.entries(players)
               .filter(([, data]) => data)
@@ -1588,6 +1596,7 @@ export default function App() {
       {/* ═══ TAB: PRESENZE ═══ */}
       {tab === "stats" && (
         <div style={S.content}>
+          <SectionHead title="PRESENZE" sub="Classifica per partite giocate" />
           {getSortedPlayers().length === 0 ? (
             <p style={S.emptyState}>Nessuna statistica ancora. Gioca qualche partita e registra i risultati!</p>
           ) : (
@@ -1661,6 +1670,7 @@ export default function App() {
       {/* ═══ TAB: STORICO ═══ */}
       {tab === "history" && (
         <div style={S.content}>
+          <SectionHead title="STORICO" sub="Tutte le partite registrate, dalla più recente" />
           {matchHistory.length === 0 ? (
             <p style={S.emptyState}>Nessuna partita registrata.</p>
           ) : matchHistory.map((m) => {
@@ -1672,9 +1682,9 @@ export default function App() {
                   <span style={{ fontSize: 13, color: "#64748b" }}>{new Date(m.date).toLocaleDateString("it-IT")}</span>
                 </div>
                 <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 16, fontFamily: "'Oswald', sans-serif", fontSize: 15, letterSpacing: 1, marginBottom: 12 }}>
-                  <span style={{ color: m.winner === "A" ? "#4ade80" : "#e2e8f0" }}>Squadra A</span>
+                  <span style={{ color: "#4ade80", opacity: m.winner === "B" ? 0.55 : 1 }}>{m.winner === "A" && "🏆 "}Squadra A</span>
                   <span style={{ fontSize: 28, fontWeight: 700, letterSpacing: 3 }}>{m.scoreA} — {m.scoreB}</span>
-                  <span style={{ color: m.winner === "B" ? "#4ade80" : "#e2e8f0" }}>Squadra B</span>
+                  <span style={{ color: "#fde68a", opacity: m.winner === "A" ? 0.55 : 1 }}>Squadra B{m.winner === "B" && " 🏆"}</span>
                 </div>
                 {m.mvp && <div style={{ textAlign: "center", marginBottom: 12, fontSize: 14, color: "#eab308", fontFamily: "'Oswald', sans-serif" }}>⭐ MVP: {m.mvp}</div>}
                 {tA.length > 0 && tB.length > 0 ? (
@@ -2042,17 +2052,18 @@ export default function App() {
 const S = {
   container: { position: "relative", minHeight: "100vh", background: "linear-gradient(145deg, #0a1628 0%, #0f2218 40%, #1a1a2e 100%)", fontFamily: "'Source Sans 3', sans-serif", color: "#e2e8f0", overflow: "hidden", paddingBottom: 40 },
   bgPattern: { position: "fixed", inset: 0, backgroundImage: "radial-gradient(circle at 20% 50%, rgba(22,163,74,0.08) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(234,179,8,0.05) 0%, transparent 50%)", pointerEvents: "none", zIndex: 0 },
-  loadWrap: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100vh", background: "#0a1628" },
-  spinner: { width: 48, height: 48, border: "4px solid rgba(22,163,74,0.2)", borderTopColor: "#16a34a", borderRadius: "50%", animation: "spin 0.8s linear infinite" },
-  loadText: { marginTop: 16, color: "#94a3b8", fontFamily: "'Oswald', sans-serif", fontSize: 18, letterSpacing: 2 },
+  header: { position: "relative", zIndex: 1, textAlign: "center", padding: "28px 20px 14px", display: "flex", flexDirection: "column", alignItems: "center" },
   toast: { position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", padding: "12px 28px", borderRadius: 12, color: "white", fontWeight: 600, fontSize: 15, zIndex: 1000, boxShadow: "0 8px 32px rgba(0,0,0,0.4)", maxWidth: "90vw", textAlign: "center" },
   adminBar: { position: "sticky", top: 0, zIndex: 400, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "8px 12px", background: "rgba(26,26,46,0.96)", borderBottom: "1px solid rgba(234,179,8,0.3)", backdropFilter: "blur(6px)" },
   adminBarBtn: { padding: "6px 10px", fontSize: 12, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.05)", color: "#e2e8f0", cursor: "pointer" },
-  subtitle: { fontFamily: "'Oswald', sans-serif", fontSize: 13, letterSpacing: 4, color: "#64748b", marginTop: 6, textTransform: "uppercase" },
-  tabBar: { position: "relative", zIndex: 1, display: "flex", justifyContent: "center", gap: 4, padding: "0 12px 20px", flexWrap: "wrap" },
-  tabBtn: { display: "flex", alignItems: "center", gap: 6, padding: "10px 16px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, color: "#94a3b8", cursor: "pointer", fontFamily: "'Oswald', sans-serif", fontSize: 13, letterSpacing: 1, transition: "all 0.2s" },
-  tabActive: { background: "rgba(22,163,74,0.15)", border: "1px solid rgba(22,163,74,0.3)", color: "#4ade80" },
-  tabLabel: { fontSize: 12, letterSpacing: 1.5 },
+  subtitle: { fontFamily: "'Oswald', sans-serif", fontSize: 13, letterSpacing: 4, color: "#64748b", marginTop: 12, textTransform: "uppercase" },
+  tabBar: { position: "relative", zIndex: 1, display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 4, maxWidth: 560, margin: "0 auto 22px", padding: 4, width: "calc(100% - 24px)", boxSizing: "border-box", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16 },
+  tabBtn: { display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "9px 2px 8px", minWidth: 0, background: "transparent", border: "1px solid transparent", borderRadius: 12, color: "#94a3b8", cursor: "pointer", fontFamily: "'Oswald', sans-serif", transition: "all 0.2s", WebkitTapHighlightColor: "transparent" },
+  tabActive: { background: "rgba(22,163,74,0.15)", border: "1px solid rgba(22,163,74,0.35)", color: "#4ade80" },
+  tabLabel: { fontSize: 10.5, letterSpacing: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" },
+  sectionHead: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, margin: "0 0 18px", paddingLeft: 12, borderLeft: "3px solid #eab308" },
+  sectionTitle: { fontFamily: "'Oswald', sans-serif", fontSize: 22, fontWeight: 600, letterSpacing: 3, color: "#eab308", margin: 0, lineHeight: 1.1 },
+  sectionSub: { fontSize: 13, color: "#94a3b8", margin: "4px 0 0", lineHeight: 1.35 },
   content: { position: "relative", zIndex: 1, maxWidth: 900, margin: "0 auto", padding: "0 16px" },
   sectionDesc: { textAlign: "center", color: "#64748b", fontSize: 14, marginBottom: 20 },
   inputSection: { display: "flex", justifyContent: "center", marginBottom: 24 },
@@ -2090,7 +2101,8 @@ const S = {
   teamVsRow: { display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap", justifyContent: "center" },
   teamBox: { flex: 1, minWidth: 200, borderRadius: 16, overflow: "hidden", border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.03)" },
   teamHeader: { padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" },
-  teamTitle: { fontFamily: "'Oswald', sans-serif", fontSize: 16, letterSpacing: 2, fontWeight: 600 },
+  teamTitle: { fontFamily: "'Oswald', sans-serif", fontSize: 16, letterSpacing: 2, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 8 },
+  teamDot: { width: 10, height: 10, borderRadius: "50%", display: "inline-block", boxShadow: "0 0 0 3px rgba(255,255,255,0.06)" },
   teamPower: { fontSize: 13, color: "#94a3b8", fontFamily: "'Oswald', sans-serif", letterSpacing: 1 },
   teamPlayer: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 16px", borderTop: "1px solid rgba(255,255,255,0.04)" },
   capBadge: { display: "inline-flex", alignItems: "center", justifyContent: "center", marginLeft: 8, width: 18, height: 18, fontSize: 11, fontWeight: 700, borderRadius: "50%", background: "#eab308", color: "#1a1a2e", fontFamily: "'Oswald', sans-serif", verticalAlign: "middle" },
