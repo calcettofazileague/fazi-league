@@ -1544,7 +1544,7 @@ export default function App() {
                 const mine = norm(p.nickname) === myName;
                 return (
                   <div key={p.key}
-                    style={{ width: 190, borderRadius: 14, overflow: "hidden", border: `2px solid ${tier.color}`, background: "#0d1117", flexShrink: 0, position: "relative", boxShadow: "0 8px 24px rgba(0,0,0,0.4)", cursor: adminMode || mine ? "pointer" : "default" }}
+                    style={{ width: 190, borderRadius: 14, overflow: "hidden", border: `2px solid ${tier.color}`, background: "#0c0c0c", flexShrink: 0, position: "relative", boxShadow: "0 8px 24px rgba(0,0,0,0.4)", cursor: adminMode || mine ? "pointer" : "default" }}
                     onClick={() => (adminMode ? startEditingPlayerStats(p.nickname) : mine && openProfileEditor(p.nickname))}>
                     {adminMode && (
                       <button onClick={(e) => { e.stopPropagation(); handleDeletePlayer(p.key, p.nickname); }} style={S.cardDelete}>✕</button>
@@ -2050,11 +2050,11 @@ export default function App() {
 }
 
 const S = {
-  container: { position: "relative", minHeight: "100vh", background: "linear-gradient(145deg, #0a1628 0%, #0f2218 40%, #1a1a2e 100%)", fontFamily: "'Source Sans 3', sans-serif", color: "#e2e8f0", overflow: "hidden", paddingBottom: 40 },
-  bgPattern: { position: "fixed", inset: 0, backgroundImage: "radial-gradient(circle at 20% 50%, rgba(22,163,74,0.08) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(234,179,8,0.05) 0%, transparent 50%)", pointerEvents: "none", zIndex: 0 },
+  container: { position: "relative", minHeight: "100vh", background: "#080808", fontFamily: "'Source Sans 3', sans-serif", color: "#e2e8f0", overflow: "hidden", paddingBottom: 40 },
+  bgPattern: { position: "fixed", inset: 0, backgroundImage: "radial-gradient(ellipse 70% 45% at 50% 0%, rgba(22,163,74,0.13) 0%, transparent 70%), radial-gradient(circle at 85% 30%, rgba(234,179,8,0.04) 0%, transparent 45%)", pointerEvents: "none", zIndex: 0 },
   header: { position: "relative", zIndex: 1, textAlign: "center", padding: "28px 20px 14px", display: "flex", flexDirection: "column", alignItems: "center" },
   toast: { position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", padding: "12px 28px", borderRadius: 12, color: "white", fontWeight: 600, fontSize: 15, zIndex: 1000, boxShadow: "0 8px 32px rgba(0,0,0,0.4)", maxWidth: "90vw", textAlign: "center" },
-  adminBar: { position: "sticky", top: 0, zIndex: 400, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "8px 12px", background: "rgba(26,26,46,0.96)", borderBottom: "1px solid rgba(234,179,8,0.3)", backdropFilter: "blur(6px)" },
+  adminBar: { position: "sticky", top: 0, zIndex: 400, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "8px 12px", background: "rgba(14,14,14,0.96)", borderBottom: "1px solid rgba(234,179,8,0.3)", backdropFilter: "blur(6px)" },
   adminBarBtn: { padding: "6px 10px", fontSize: 12, fontFamily: "'Oswald', sans-serif", letterSpacing: 1, borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.05)", color: "#e2e8f0", cursor: "pointer" },
   subtitle: { fontFamily: "'Oswald', sans-serif", fontSize: 13, letterSpacing: 4, color: "#64748b", marginTop: 12, textTransform: "uppercase" },
   tabBar: { position: "relative", zIndex: 1, display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 4, maxWidth: 560, margin: "0 auto 22px", padding: 4, width: "calc(100% - 24px)", boxSizing: "border-box", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16 },
@@ -2073,7 +2073,7 @@ const S = {
   formInput: { width: "100%", padding: "11px 14px", fontSize: 16, fontFamily: "'Source Sans 3', sans-serif", fontWeight: 600, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, color: "#e2e8f0", outline: "none", boxSizing: "border-box", marginBottom: 12 },
   fieldLabel: { display: "block", fontSize: 11, color: "#94a3b8", marginBottom: 4, fontFamily: "'Oswald', sans-serif", letterSpacing: 1 },
   inputGlow: { position: "absolute", bottom: -2, left: "10%", right: "10%", height: 2, background: "linear-gradient(90deg, transparent, #16a34a, transparent)", borderRadius: 2 },
-  suggestBox: { position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, background: "#1a1a2e", border: "1px solid rgba(22,163,74,0.4)", borderRadius: 12, overflow: "hidden", zIndex: 100, boxShadow: "0 8px 24px rgba(0,0,0,0.5)" },
+  suggestBox: { position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, background: "#161616", border: "1px solid rgba(22,163,74,0.4)", borderRadius: 12, overflow: "hidden", zIndex: 100, boxShadow: "0 8px 24px rgba(0,0,0,0.5)" },
   suggestItem: { padding: "12px 18px", cursor: "pointer", fontSize: 15, fontWeight: 600, color: "#e2e8f0", display: "flex", alignItems: "center", gap: 10 },
   daysGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 },
   dayCard: { background: "rgba(255,255,255,0.04)", borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)", overflow: "hidden" },
@@ -2114,7 +2114,7 @@ const S = {
   actionBtn: { padding: "10px 16px", fontFamily: "'Oswald', sans-serif", fontSize: 14, letterSpacing: 1.5, border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, background: "rgba(255,255,255,0.05)", color: "#e2e8f0", cursor: "pointer" },
   actionPrimary: { background: "linear-gradient(135deg, #16a34a, #15803d)", border: "none", color: "white" },
   overlay: { position: "fixed", inset: 0, zIndex: 500, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" },
-  modal: { background: "#1a1a2e", borderRadius: 20, border: "1px solid rgba(255,255,255,0.08)", padding: 24, maxWidth: 600, width: "100%" },
+  modal: { background: "#141414", borderRadius: 20, border: "1px solid rgba(255,255,255,0.08)", padding: 24, maxWidth: 600, width: "100%" },
   modalTitle: { fontFamily: "'Oswald', sans-serif", fontSize: 20, letterSpacing: 2, textAlign: "center", margin: "0 0 20px" },
   scoreRow: { display: "flex", alignItems: "center", justifyContent: "center", gap: 16, marginBottom: 24 },
   scoreTeam: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8 },
@@ -2123,7 +2123,7 @@ const S = {
   scoreBtn: { width: 36, height: 36, borderRadius: "50%", border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", color: "#e2e8f0", fontSize: 20, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Oswald', sans-serif" },
   scoreNum: { fontFamily: "'Oswald', sans-serif", fontSize: 36, fontWeight: 700, minWidth: 40, textAlign: "center" },
   mvpLabel: { display: "block", fontFamily: "'Oswald', sans-serif", fontSize: 14, letterSpacing: 1.5, color: "#eab308", marginBottom: 8 },
-  mvpSelect: { width: "100%", padding: "12px", background: "#1a202c", border: "2px solid #eab308", borderRadius: 10, color: "#e2e8f0", fontFamily: "'Oswald', sans-serif", fontSize: 15, cursor: "pointer" },
+  mvpSelect: { width: "100%", padding: "12px", background: "#101010", border: "2px solid #eab308", borderRadius: 10, color: "#e2e8f0", fontFamily: "'Oswald', sans-serif", fontSize: 15, cursor: "pointer" },
   formHeader: { display: "flex", padding: "8px 12px", fontFamily: "'Oswald', sans-serif", fontSize: 11, letterSpacing: 1.5, color: "#64748b", textTransform: "uppercase", borderBottom: "1px solid rgba(255,255,255,0.06)" },
   formRow: { display: "flex", alignItems: "center", padding: "8px 12px", borderBottom: "1px solid rgba(255,255,255,0.03)" },
   sideChip: { width: 34, height: 30, borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", color: "#e2e8f0", fontFamily: "'Oswald', sans-serif", fontSize: 14, fontWeight: 700, cursor: "pointer", flexShrink: 0 },

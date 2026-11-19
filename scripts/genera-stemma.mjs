@@ -30,7 +30,7 @@ const OSWALD_500 = loadFont(500);
 
 // ─── Colori (gli stessi dell'app) ───
 const C = {
-  night: "#0a1628", pitch: "#0f2218", ink: "#1a1a2e",
+  night: "#101010", pitch: "#080808", ink: "#030303",
   green1: "#1f4a33", green2: "#0b1d14",
   gold1: "#fde68a", gold2: "#eab308", gold3: "#b45309",
   silver1: "#f8fafc", silver2: "#94a3b8",
@@ -68,48 +68,32 @@ function shield(i = 0) {
   return `M120 ${f(top)}L${f(240 - side)} ${f(sh)}L${f(240 - side)} ${mid}Q${f(240 - side)} ${f(230 - i * 0.6)} 120 ${f(bot)}Q${f(side)} ${f(230 - i * 0.6)} ${f(side)} ${mid}L${f(side)} ${f(sh)}Z`;
 }
 
-// Pallone: esagoni bianchi + pentagoni scuri, ritagliato nel cerchio
-function ball(cx, cy, R, id) {
-  const poly = (x, y, r, n, rot) => {
-    const p = [];
-    for (let k = 0; k < n; k++) {
-      const a = rot + (k * 2 * Math.PI) / n;
-      p.push(`${f(x + r * Math.cos(a))},${f(y + r * Math.sin(a))}`);
-    }
-    return `M${p.join("L")}Z`;
-  };
-  // Geometria del pallone classico visto di fronte: pentagono centrale, 5 esagoni attorno,
-  // 5 pentagoni (tagliati dal bordo) con una punta verso il centro.
-  const rc = R * 0.3, re = R * 0.28, d = R * 0.9;
-  const vtx = (x, y, r, rot) => [...Array(5)].map((_, k) => [x + r * Math.cos(rot + (k * 2 * Math.PI) / 5), y + r * Math.sin(rot + (k * 2 * Math.PI) / 5)]);
-  let pents = poly(cx, cy, rc, 5, -Math.PI / 2);
-  let seams = "";
-  const outer = [];
-  for (let k = 0; k < 5; k++) {
-    const a = -Math.PI / 2 + (k * 2 * Math.PI) / 5;
-    const ex = cx + d * Math.cos(a), ey = cy + d * Math.sin(a);
-    pents += poly(ex, ey, re, 5, a + Math.PI);
-    outer.push(vtx(ex, ey, re, a + Math.PI));
-    seams += `M${f(cx + rc * Math.cos(a))} ${f(cy + rc * Math.sin(a))}L${f(ex - re * Math.cos(a))} ${f(ey - re * Math.sin(a))}`;
-  }
-  // lato esterno di ogni esagono: unisce i vertici più vicini di due pentagoni del bordo
-  for (let k = 0; k < 5; k++) {
-    const P = outer[k], Q = outer[(k + 1) % 5];
-    let best = null;
-    for (const p of P) for (const q of Q) {
-      const dd = Math.hypot(p[0] - q[0], p[1] - q[1]);
-      if (!best || dd < best[0]) best = [dd, p, q];
-    }
-    seams += `M${f(best[1][0])} ${f(best[1][1])}L${f(best[2][0])} ${f(best[2][1])}`;
-  }
+// Airone (simbolo di Fazi) in posa araldica: di fronte, ali aperte, su una zampa sola,
+// testa di profilo rivolta a sinistra. Coordinate locali con lo 0 al centro del corpo;
+// (x, y) = dove va lo 0, k = scala. Ingombro: x da -56 a 56, y da -21 a 80.
+function heron(x, y, k) {
+  // ala destra; la sinistra è la stessa specchiata
+  const wing = "M5 18C12 4 30 -10 56 -20L47 -10L54 -8L45 0L51 3L41 8.5L45.5 12L35 15.5L37.5 20L26 22L27 26.5L9 30Z";
+  const coverts = "M9 25C19 15 31 5 47 -7";
+  const body = "M0 15C5 17 6.5 27 6 36C5.5 44 3 50 0 54C-3 50 -5.5 44 -6 36C-6.5 27 -5 17 0 15Z";
+  const tail = "M-5 50L0 62L5 50Z";
+  const neck = "M0 17C4.5 10 4.5 4 1 -2C-2 -6.5 -1.5 -10 1 -12.5";
+  const head = "M-2.5 -17.5C0 -20 4 -19.5 5 -16.5L16 -20L5.2 -14C4.6 -11.5 2 -10.5 -0.5 -11.5L-21 -13.6Z";
+  const legs = "M2 53L2 78M-4.5 79.5L2 78L7.5 79.5M-2 52L-10 61L-2.5 65.5";
+  const g = 'fill="url(#fl-gold-v)"';
   return `
-  <clipPath id="${id}"><circle cx="${cx}" cy="${cy}" r="${R}"/></clipPath>
-  <circle cx="${cx}" cy="${cy}" r="${R}" fill="url(#fl-silver)"/>
-  <g clip-path="url(#${id})">
-    <path d="${pents}" fill="${C.green2}"/>
-    <path d="${seams}" stroke="${C.green2}" stroke-width="${f(R * 0.06)}" stroke-linecap="round" fill="none"/>
-  </g>
-  <circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="url(#fl-gold)" stroke-width="${f(R * 0.12)}"/>`;
+  <g transform="translate(${f(x)} ${f(y)}) scale(${k})">
+    <path d="${legs}" stroke="url(#fl-gold-v)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <path d="${wing}" ${g}/>
+    <path d="${wing}" ${g} transform="scale(-1 1)"/>
+    <path d="${coverts}" stroke="${C.green2}" stroke-width="1.3" stroke-linecap="round" fill="none" opacity=".45"/>
+    <path d="${coverts}" stroke="${C.green2}" stroke-width="1.3" stroke-linecap="round" fill="none" opacity=".45" transform="scale(-1 1)"/>
+    <path d="${tail}" ${g}/>
+    <path d="${body}" ${g}/>
+    <path d="${neck}" stroke="url(#fl-gold-v)" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+    <path d="${head}" ${g}/>
+    <circle cx="0.6" cy="-15.6" r="1.1" fill="${C.green2}"/>
+  </g>`;
 }
 
 const defs = `
@@ -122,6 +106,9 @@ const defs = `
     </linearGradient>
     <linearGradient id="fl-rim" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="${C.gold1}"/><stop offset=".55" stop-color="${C.gold2}"/><stop offset="1" stop-color="${C.gold3}"/>
+    </linearGradient>
+    <linearGradient id="fl-gold-v" x1="0" y1="-21" x2="0" y2="80" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="${C.gold1}"/><stop offset=".6" stop-color="${C.gold2}"/><stop offset="1" stop-color="${C.gold3}"/>
     </linearGradient>
     <linearGradient id="fl-silver" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="${C.silver1}"/><stop offset="1" stop-color="${C.silver2}"/>
@@ -149,7 +136,7 @@ function crest() {
   <path d="${textPath(OSWALD_700, "FAZI", 120, 146, 78, 7)}" fill="url(#fl-silver)"/>
   <path d="M50 160h40M150 160h40" stroke="url(#fl-gold)" stroke-width="2" stroke-linecap="round"/>
   <path d="${textPath(OSWALD_500, "LEAGUE", 120, 169.5, 23, 7.5)}" fill="url(#fl-gold)"/>
-  ${ball(120, 214, 21, "fl-ball")}`;
+  ${heron(120, 173 + 21 * 0.73, 0.73)}`;
 }
 
 // ─── Versione piccola (favicon): scudo, bordo oro, "F" ───

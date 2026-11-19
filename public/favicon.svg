@@ -9,6 +9,9 @@
     <linearGradient id="fl-rim" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#fde68a"/><stop offset=".55" stop-color="#eab308"/><stop offset="1" stop-color="#b45309"/>
     </linearGradient>
+    <linearGradient id="fl-gold-v" x1="0" y1="-21" x2="0" y2="80" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fde68a"/><stop offset=".6" stop-color="#eab308"/><stop offset="1" stop-color="#b45309"/>
+    </linearGradient>
     <linearGradient id="fl-silver" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#f8fafc"/><stop offset="1" stop-color="#94a3b8"/>
     </linearGradient>
