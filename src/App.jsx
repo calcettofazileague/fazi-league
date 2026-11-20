@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { db } from "./firebase.js";
-import { ref, set, onValue, push, get, remove, update, runTransaction, query, limitToLast } from "firebase/database";
+import { db, auth, authReady } from "./firebase.js";
+import { ref, set, onValue, push, get, remove, update, runTransaction, query, limitToLast, serverTimestamp } from "firebase/database";
 
 // ═══════════════════════════════════════════════════════════
 //  CONFIG
@@ -548,18 +548,23 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    // si legge solo dopo il login anonimo: le regole possono richiederlo
+    let unsubs = [], alive = true;
     const listen = (path, cb) => onValue(ref(db, path), (snap) => cb(snap.val()), (err) => console.error(path, err));
-    const unsubs = [
-      listen(`signups/${weekId}`, (data) => { setSignups(data || {}); setLoading(false); }),
-      listen(`signupMeta/${weekId}`, (data) => setSignupMeta(data || {})),
-      listen("playerStats", (data) => setPlayerStats(data || {})),
-      listen("matchHistory", (data) => setMatchHistory(data ? Object.values(data).filter((m) => m && m.id).sort((a, b) => b.id - a.id) : [])),
-      listen("teams", (data) => setTeamsArchive(data || {})),
-      listen("players", (data) => setPlayers(data || {})),
-      listen("ratingAdjust", (data) => setRatingAdjust(data || {})),
-    ];
+    authReady.then(() => {
+      if (!alive) return;
+      unsubs = [
+        listen(`signups/${weekId}`, (data) => { setSignups(data || {}); setLoading(false); }),
+        listen(`signupMeta/${weekId}`, (data) => setSignupMeta(data || {})),
+        listen("playerStats", (data) => setPlayerStats(data || {})),
+        listen("matchHistory", (data) => setMatchHistory(data ? Object.values(data).filter((m) => m && m.id).sort((a, b) => b.id - a.id) : [])),
+        listen("teams", (data) => setTeamsArchive(data || {})),
+        listen("players", (data) => setPlayers(data || {})),
+        listen("ratingAdjust", (data) => setRatingAdjust(data || {})),
+      ];
+    });
     const fallback = setTimeout(() => setLoading(false), 6000);
-    return () => { unsubs.forEach((u) => u()); clearTimeout(fallback); };
+    return () => { alive = false; unsubs.forEach((u) => u()); clearTimeout(fallback); };
   }, [weekId]);
 
   // ─── DATI DERIVATI ───
@@ -1192,15 +1197,38 @@ export default function App() {
   };
 
   // ─── ADMIN CON PIN ───
+  // L'impronta del PIN non si legge dal database: si prova ad aprire una "sessione admin"
+  // (adminSessions/<id del telefono>) e le regole la accettano solo se l'impronta è giusta.
+  // Le scritture da admin sono permesse finché la sessione è valida.
+  const openAdminSession = async (hash) => {
+    const user = auth.currentUser || (await authReady);
+    if (!user) throw new Error("Accesso non pronto, controlla la connessione");
+    try {
+      await set(ref(db, `adminSessions/${user.uid}`), { hash, t: serverTimestamp() });
+      return true;
+    } catch (err) {
+      if (/permission/i.test(err?.code || err?.message || "")) return false; // PIN sbagliato
+      throw err;
+    }
+  };
+
+  const closeAdminSession = () => {
+    const uid = auth.currentUser?.uid;
+    if (uid) remove(ref(db, `adminSessions/${uid}`)).catch(() => {});
+  };
+
   const requestAdmin = async () => {
     try {
-      const cfg = (await get(ref(db, "config/adminPin"))).val();
-      if (cfg?.hash && lsGet("fazi_admin_token") === cfg.hash) {
+      await authReady;
+      const salt = (await get(ref(db, "config/adminPin/salt"))).val();
+      const token = lsGet("fazi_admin_token");
+      if (salt && token && (await openAdminSession(token))) {
         setAdminMode(true);
         showToast("🔧 Modalità admin attiva");
         return;
       }
-      setPinModal({ mode: cfg?.hash ? "enter" : "create", pin: "", pin2: "", remember: true, error: "", cfg });
+      if (salt && token) lsSet("fazi_admin_token", ""); // PIN cambiato da un altro telefono
+      setPinModal({ mode: salt ? "enter" : "create", pin: "", pin2: "", remember: true, error: "", cfg: { salt } });
     } catch (err) {
       showToast("Errore di connessione", "error");
     }
@@ -1215,7 +1243,7 @@ export default function App() {
     try {
       if (pm.mode === "enter") {
         const h = await hashPin(pin, pm.cfg.salt);
-        if (h !== pm.cfg.hash) {
+        if (!(await openAdminSession(h))) {
           logEvent("admin_fail", "Tentativo di accesso admin con PIN sbagliato");
           return setPinModal({ ...pm, pin: "", checking: false, error: "PIN sbagliato" });
         }
@@ -1227,6 +1255,7 @@ export default function App() {
         const salt = randomSalt();
         const h = await hashPin(pin, salt);
         await set(ref(db, "config/adminPin"), { salt, hash: h, t: Date.now() });
+        await openAdminSession(h);
         lsSet("fazi_admin_token", pm.remember ? h : "");
         logEvent("admin", pm.mode === "create" ? "PIN admin creato" : "PIN admin cambiato");
       }
@@ -1240,6 +1269,7 @@ export default function App() {
 
   const exitAdmin = (forget = false) => {
     if (forget) lsSet("fazi_admin_token", "");
+    closeAdminSession();
     setAdminMode(false);
     showToast(forget ? "Admin chiuso, PIN richiesto al prossimo accesso" : "Modalità admin disattivata");
   };
