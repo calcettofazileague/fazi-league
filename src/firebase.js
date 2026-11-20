@@ -20,7 +20,7 @@ const firebaseConfig = {
 
 // Chiave del sito reCAPTCHA v3 per App Check (è pubblica, va bene nel codice).
 // Vuota = App Check spento. Vedi GUIDA-SICUREZZA.md, fase 1.
-const APP_CHECK_SITE_KEY = "";
+const APP_CHECK_SITE_KEY = "6LdLyykuAAAAAPoroWCaNPD0fZ0_2nwpLv4qKwLs";
 
 const app = initializeApp(firebaseConfig);
 
